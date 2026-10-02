@@ -15,7 +15,7 @@ Birinchi metodika quyidagilarga mos bo'lishi kerak, aks holda tizim uni hozir qa
 | Mezon | Sabab |
 |---|---|
 | Savollar `single_choice` (yoki `integer`/`decimal`/`boolean`) | Boshqa savol turlari MVP whitelist'ida yo'q |
-| Metodikada haqiqiy umumiy ball (`total` shkala) bor | Kontrakt aniq bitta `total` shkalani talab qiladi; sun'iy umumiy ball yaratilmaydi |
+| Natija haqiqiy umumiy ball (`total`) yoki bir nechta omil (`factor`) shkalasi ko'rinishida | Sun'iy umumiy ball yaratilmaydi; ko'p omilli metodikada umumiy ball bo'lmasligi mumkin |
 | Ball `sum`, `mean`, `sum_prorated` yoki `weighted_sum` bilan hisoblanadi | Boshqa agregatsiya hozir qo'llab-quvvatlanmaydi |
 | Tadqiqot maqsadida foydalanishga yozma ruxsat bor | Litsenziya `research` foydalanish turini qamrashi kerak |
 | Respondentni identifikatsiya qilish shart emas | Pilot faqat P001 kabi kod bilan ishlaydi |

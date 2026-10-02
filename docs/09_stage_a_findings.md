@@ -7,6 +7,7 @@ Tekshiruv paytida kodga o'zgarish kiritilmagan.
 F-05 — `8490da5`; F-07 — `9861703`; F-08 — `8ccd3b2`; F-15 — repository GitHub'ga ulandi (`712826f`).
 C bosqichi (branch `feat/stage-c-onboarding`): F-09 — `568b045`; F-12 — `0542e2f`.
 E bosqichi (branch `feat/stage-e-close-export`): F-10 — `e4c3123`, `7c0d90b`; F-11 — `e22ca2f`.
+B bosqichi (branch `feat/big-five-methodology`): F-14 — `total` shkala ixtiyoriy, `factor` shkalalari qo'shildi.
 Qolganlari ochiq.
 
 ## 1. Muhit

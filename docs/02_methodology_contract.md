@@ -121,7 +121,7 @@ Invariantlar:
 | `scale_id` | UUID | PK |
 | `methodology_version_id` | UUID | FK |
 | `scale_code` | code | Unique within version |
-| `scale_kind` | enum | `total`, `subscale`; aynan bitta `total` majburiy |
+| `scale_kind` | enum | `total`, `factor`, `subscale`; ko'pi bilan bitta `total`; `total` bo'lmasa kamida bitta `factor` (ko'p omilli metodikalar, masalan Katta beshlik, umumiy ball bermaydi) |
 | `label_i18n` | localized string | Default locale majburiy |
 | `unit_code` | code | Masalan `raw_point`, `percent_0_100` |
 | `theoretical_min`, `theoretical_max` | decimal | `min < max` |

@@ -56,6 +56,9 @@ def create_methodology(
     return methodology
 
 
+SCALE_KINDS = {"total", "factor", "subscale"}
+
+
 def validate_snapshot(snapshot: dict, default_locale: str) -> None:
     items = snapshot.get("items")
     scales = snapshot.get("scales")
@@ -78,10 +81,32 @@ def validate_snapshot(snapshot: dict, default_locale: str) -> None:
         raise DomainError(
             "METHODOLOGY_SCHEMA_INVALID", "Scale codes must be present and unique"
         )
-    if sum(scale.get("scale_kind") == "total" for scale in scales) != 1:
+    kinds = [scale.get("scale_kind") for scale in scales]
+    if any(kind not in SCALE_KINDS for kind in kinds):
         raise DomainError(
-            "METHODOLOGY_SCHEMA_INVALID", "Snapshot requires exactly one total scale"
+            "METHODOLOGY_SCHEMA_INVALID",
+            "Scale kind must be one of: " + ", ".join(sorted(SCALE_KINDS)),
         )
+    # A total score is optional: multi-factor instruments such as the Big Five report
+    # several primary factors, and a sum across them would be an invented score.
+    if kinds.count("total") > 1:
+        raise DomainError(
+            "METHODOLOGY_SCHEMA_INVALID", "Snapshot allows at most one total scale"
+        )
+    if "total" not in kinds and "factor" not in kinds:
+        raise DomainError(
+            "METHODOLOGY_SCHEMA_INVALID",
+            "Snapshot requires a total scale or at least one factor scale",
+        )
+    known_items = set(item_codes)
+    for scale in scales:
+        unknown = set(scale.get("item_codes") or []) - known_items
+        if unknown:
+            raise DomainError(
+                "METHODOLOGY_SCHEMA_INVALID",
+                "Scale refers to unknown items",
+                details={"scale_code": scale["scale_code"], "items": sorted(unknown)},
+            )
     interpreter = RuleInterpreter()
     for item in items:
         if item.get("item_type") not in {
@@ -109,6 +134,8 @@ def validate_snapshot(snapshot: dict, default_locale: str) -> None:
         decimal_value(scale["theoretical_max"])
         if scale.get("transform_expr"):
             interpreter.validate(scale["transform_expr"])
+        if scale.get("norm"):
+            _validate_norm(scale["norm"])
     norm = snapshot.get("norm")
     if norm:
         _validate_norm(norm)

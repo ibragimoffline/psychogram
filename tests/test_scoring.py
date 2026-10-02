@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from decimal import Decimal
 
 import pytest
@@ -146,3 +147,49 @@ def test_norm_overlap_is_rejected_at_publish_validation():
     with pytest.raises(DomainError) as caught:
         validate_snapshot(snapshot, "uz-Latn")
     assert caught.value.code == "NORM_OVERLAP"
+
+
+def _factor_snapshot(*kinds: str) -> dict:
+    snapshot = copy.deepcopy(SYNTH_BALANCE_DEMO)
+    template = snapshot["scales"][0]
+    snapshot["scales"] = []
+    for index, kind in enumerate(kinds):
+        scale = copy.deepcopy(template)
+        scale.update(scale_code=f"s{index}", scale_kind=kind)
+        scale["transform_expr"]["args"][0]["left"]["code"] = f"s{index}"
+        snapshot["scales"].append(scale)
+    snapshot["interpretations"] = []
+    return snapshot
+
+
+def test_factor_scales_may_replace_the_total_scale():
+    validate_snapshot(_factor_snapshot("factor", "factor", "subscale"), "uz-Latn")
+    validate_snapshot(_factor_snapshot("total", "subscale"), "uz-Latn")
+
+
+@pytest.mark.parametrize(
+    "kinds", [("total", "total"), ("subscale",), ("factor", "dimension")]
+)
+def test_scale_kinds_are_constrained(kinds):
+    with pytest.raises(DomainError) as error:
+        validate_snapshot(_factor_snapshot(*kinds), "uz-Latn")
+    assert error.value.code == "METHODOLOGY_SCHEMA_INVALID"
+
+
+def test_scale_items_and_scale_norms_are_validated():
+    unknown = _factor_snapshot("factor")
+    unknown["scales"][0]["item_codes"] = ["q1", "q99"]
+    with pytest.raises(DomainError) as error:
+        validate_snapshot(unknown, "uz-Latn")
+    assert error.value.details == {"scale_code": "s0", "items": ["q99"]}
+
+    overlapping = _factor_snapshot("factor")
+    overlapping["scales"][0]["norm"] = {
+        "bands": [
+            {"band_code": "a", "lower_bound": "0", "upper_bound": "6"},
+            {"band_code": "b", "lower_bound": "5", "upper_bound": "10"},
+        ]
+    }
+    with pytest.raises(DomainError) as error:
+        validate_snapshot(overlapping, "uz-Latn")
+    assert error.value.code == "NORM_OVERLAP"
