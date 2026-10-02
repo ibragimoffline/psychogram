@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { api, safeMessage } from '../lib/api'
-import { bootstrapEnabled } from '../lib/features'
+import { bootstrapEnabled, registrationEnabled } from '../lib/features'
 import { useAuth } from '../context/AuthContext'
 import { Button, ErrorSummary, Field, Notice } from '../components/UI'
 
@@ -10,7 +10,7 @@ export function LoginPage(){
   const {token,setSession}=useAuth();const navigate=useNavigate();const [error,setError]=useState('');const [busy,setBusy]=useState(false)
   if(token)return <Navigate to="/researches" replace/>
   async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);setError('');const form=new FormData(e.currentTarget);try{const result=await api<Token>('/api/v1/auth/login',{method:'POST',bodyJson:{email:form.get('email'),password:form.get('password')}});await setSession(result.access_token);navigate('/researches')}catch(err){setError(safeMessage(err))}finally{setBusy(false)}}
-  return <AuthFrame label="Professional tadqiqot muhiti" title="Ish maydoniga kiring"><form onSubmit={submit} aria-describedby={error?'login-error':undefined}><ErrorSummary id="login-error" error={error} title="Kirish amalga oshmadi"/><Field label="Email"><input name="email" type="email" autoComplete="email" required autoFocus/></Field><Field label="Parol"><input name="password" type="password" autoComplete="current-password" required/></Field><Button type="submit" disabled={busy}>{busy?'Tekshirilmoqda…':'Kirish'}</Button><p className="auth-links"><Link to="/register">Tashkilot yaratish</Link>{bootstrapEnabled()&&<Link to="/setup/bootstrap">Platformani sozlash</Link>}</p></form></AuthFrame>
+  return <AuthFrame label="Professional tadqiqot muhiti" title="Ish maydoniga kiring"><form onSubmit={submit} aria-describedby={error?'login-error':undefined}><ErrorSummary id="login-error" error={error} title="Kirish amalga oshmadi"/><Field label="Email"><input name="email" type="email" autoComplete="email" required autoFocus/></Field><Field label="Parol"><input name="password" type="password" autoComplete="current-password" required/></Field><Button type="submit" disabled={busy}>{busy?'Tekshirilmoqda…':'Kirish'}</Button><p className="auth-links">{registrationEnabled()&&<Link to="/register">Tashkilot yaratish</Link>}{bootstrapEnabled()&&<Link to="/setup/bootstrap">Platformani sozlash</Link>}</p></form></AuthFrame>
 }
 export function RegisterPage(){
  const {setSession}=useAuth();const navigate=useNavigate();const [error,setError]=useState('');const [busy,setBusy]=useState(false)

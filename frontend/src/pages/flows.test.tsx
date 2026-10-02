@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -23,6 +23,13 @@ describe('bootstrap production guard',()=>{
  it('hides the link and redirects direct access unless explicitly enabled',async()=>{vi.stubEnv('VITE_ENABLE_BOOTSTRAP','false');window.history.pushState({},'','/setup/bootstrap');render(<BrowserRouter><App/></BrowserRouter>);await visible(screen.findByRole('heading',{name:'Ish maydoniga kiring'}));expect(screen.queryByRole('link',{name:'Platformani sozlash'})).not.toBeInTheDocument();expect(window.location.pathname).toBe('/login')})
 })
 
+describe('pilot scope',()=>{
+ it('hides self-registration unless explicitly enabled',async()=>{window.history.pushState({},'','/register');render(<BrowserRouter><App/></BrowserRouter>);await visible(screen.findByRole('heading',{name:'Ish maydoniga kiring'}));expect(window.location.pathname).toBe('/login');expect(screen.queryByRole('link',{name:'Tashkilot yaratish'})).not.toBeInTheDocument()})
+ it('limits researcher navigation to researches and methodologies',async()=>{const researcher={...me(),memberships:[{...me().memberships[0],role:'researcher'}]};start('/researches',(input)=>String(input).includes('/auth/me')?json(researcher):json([]));const nav=await screen.findByRole('navigation',{name:'Asosiy navigatsiya'});await within(nav).findByRole('link',{name:'Tadqiqotlar'});expect(within(nav).getAllByRole('link').map(link=>link.getAttribute('aria-label'))).toEqual(['Tadqiqotlar','Metodikalar'])})
+ it('hides CSV import inside a research unless explicitly enabled',async()=>{start('/researches/r1',(input)=>{const path=String(input);if(path.includes('/auth/me'))return json(me());if(path.endsWith('/researches'))return json([research]);return json({})});await screen.findByRole('link',{name:'Javoblar'});expect(screen.queryByRole('link',{name:'CSV import'})).not.toBeInTheDocument();expect(screen.queryByText('CSV orqali kiritish')).not.toBeInTheDocument()})
+ it('does not route to CSV import unless explicitly enabled',async()=>{start('/researches/r1/import',(input)=>{const path=String(input);if(path.includes('/auth/me'))return json(me());if(path.endsWith('/researches'))return json([research]);return json({})});await waitFor(()=>expect(window.location.pathname).toBe('/researches'));expect(screen.queryByText(/CSV faylni tanlang/i)).not.toBeInTheDocument()})
+})
+
 describe('authenticated contracts',()=>{
  it('removes operator phantom create/result navigation actions',async()=>{const operator={...me(),memberships:[{...me().memberships[0],role:'operator'}]};start('/researches',(input)=>String(input).includes('/auth/me')?json(operator):json([]));await screen.findByRole('heading',{name:'Tadqiqotlar'});expect(screen.queryByRole('link',{name:'Yangi tadqiqot'})).not.toBeInTheDocument();expect(screen.queryByRole('link',{name:'Natijalar'})).not.toBeInTheDocument()})
  it('clears tenant-private reveal state and refetches with the selected tenant header',async()=>{
@@ -42,6 +49,7 @@ describe('authenticated contracts',()=>{
 
  it('uses server preview hash unchanged when confirming CSV',async()=>{
   let confirmBody:unknown
+  vi.stubEnv('VITE_ENABLE_CSV_IMPORT','true')
 start('/researches/r1/import',(input,init)=>{const path=String(input);if(path.includes('/auth/me'))return json(me());if(path.endsWith('/researches'))return json([research]);if(path.endsWith('/imports/preview'))return json({import_id:'imp1',status:'previewed',preview_hash:'server-hash-123',summary:{valid:1,invalid:0},errors:[{row_number:2,column_name:'item1',item_code:'item1',error_code:'TYPE_INVALID',severity:'error',message_key:'import.type_invalid',safe_params:{},rejected_value_preview:'***',suggested_action:'CSV qiymatini tuzating'}]},201);if(path.endsWith('/imports/imp1/confirm')){confirmBody=JSON.parse(String(init?.body));return json({import_id:'imp1',status:'confirmed',summary:{saved:1}})}return json({})})
 const input=await screen.findByLabelText(/CSV faylni tanlang/i,{selector:'input'}).catch(()=>document.querySelector('input[type="file"]') as HTMLInputElement);const csv='external_code,item1\nP-1,2';const file=new File([csv],'answers.csv',{type:'text/csv'});Object.defineProperty(file,'arrayBuffer',{value:()=>Promise.resolve(new TextEncoder().encode(csv).buffer)});await userEvent.upload(input,file);await userEvent.click(await screen.findByRole('button',{name:'Tekshirish'}));await visible(screen.findByText('TYPE_INVALID'));expect(screen.getByText('CSV qiymatini tuzating')).toBeVisible();await userEvent.click(await screen.findByRole('button',{name:'Yaroqli qatorlarni saqlash'}));await waitFor(()=>expect(confirmBody).toEqual({preview_hash:'server-hash-123'}));await visible(screen.findByText(/saved: 1/))
  })

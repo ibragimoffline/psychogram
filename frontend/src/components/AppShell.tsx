@@ -11,7 +11,6 @@ interface NavItem {to:string;label:string;icon:string;capability?:Capability}
 const baseNav:NavItem[]=[
   {to:'/researches',label:'Tadqiqotlar',icon:'flask-conical'},
   {to:'/methodologies',label:'Metodikalar',icon:'notebook-tabs'},
-  {to:'/results',label:'Natijalar',icon:'chart-no-axes-column-increasing',capability:'result:read'},
   {to:'/team',label:'Jamoa',icon:'users-round',capability:'team:manage'},
   {to:'/retention',label:'Retention',icon:'archive',capability:'retention:manage'},
   {to:'/audit',label:'Audit',icon:'scroll-text',capability:'audit:read'},
@@ -21,7 +20,7 @@ const allowed=(item:NavItem,role:Role|undefined)=>!item.capability||can(role,ite
 export function AppShell(){
   const {me,membership,selectTenant,logout}=useAuth();const location=useLocation();const navigate=useNavigate();const queryClient=useQueryClient();const role=membership?.role
   const desktop=baseNav.filter(item=>allowed(item,role))
-  const mobile=desktop.filter(item=>['/researches','/methodologies','/results','/team','/audit'].includes(item.to)).slice(0,4)
+  const mobile=desktop.filter(item=>['/researches','/methodologies','/team','/audit'].includes(item.to)).slice(0,4)
   async function switchTenant(id:string){await queryClient.cancelQueries();queryClient.clear();selectTenant(id);navigate('/researches')}
   return <div className="app-shell">
     <a href="#main" className="skip-link">Asosiy kontentga o‘tish</a>

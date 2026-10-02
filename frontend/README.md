@@ -12,6 +12,8 @@ npm.cmd run dev
 
 FastAPI should run on `http://127.0.0.1:8000`. Vite proxies `/api` during development; set `VITE_API_ORIGIN` when the API has a different public origin.
 
+Pilot feature flags (default `false`): `VITE_ENABLE_REGISTRATION` shows self-service sign-up and `VITE_ENABLE_CSV_IMPORT` shows CSV import. Each must match its backend flag (`PSYCHOGRAM_REGISTRATION_ENABLED`, `PSYCHOGRAM_CSV_IMPORT_ENABLED`); the backend refuses the request either way.
+
 ```powershell
 npm.cmd run typecheck
 npm.cmd run lint
