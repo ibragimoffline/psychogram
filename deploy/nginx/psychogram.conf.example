@@ -1,0 +1,71 @@
+# Example reverse proxy for the Psychogram pilot (nginx). NOT tested in this repository:
+# adapt names, paths and certificates, then verify with `nginx -t` and the checks in
+# docs/11_pilot_operations.md before going live.
+#
+# It covers the release gates from README.md and docs/08 section 8: HTTPS + HSTS,
+# a request body limit enforced before the API parses JSON, login rate limiting,
+# and serving the SPA with history fallback and CSP.
+
+# 5 login attempts per minute per client IP; tune for the pilot's network (NAT, VPN).
+limit_req_zone $binary_remote_addr zone=psychogram_login:10m rate=5r/m;
+
+server {
+    listen 80;
+    server_name psychogram.example.org;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name psychogram.example.org;
+
+    ssl_certificate     /etc/ssl/psychogram/fullchain.pem;
+    ssl_certificate_key /etc/ssl/psychogram/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Must stay at or below PSYCHOGRAM_MAX_REQUEST_BODY_BYTES (3100000 by default).
+    client_max_body_size 3m;
+    client_body_buffer_size 128k;
+
+    # Do not log query strings: they can carry respondent codes (participant search).
+    log_format psychogram_access '$remote_addr - [$time_local] "$request_method $uri" '
+                                 '$status $body_bytes_sent $request_time';
+    access_log /var/log/nginx/psychogram_access.log psychogram_access;
+
+    location = /api/v1/auth/login {
+        limit_req zone=psychogram_login burst=5 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8000;
+        include /etc/nginx/psychogram_proxy_params;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        include /etc/nginx/psychogram_proxy_params;
+    }
+
+    location = /health {
+        proxy_pass http://127.0.0.1:8000;
+        include /etc/nginx/psychogram_proxy_params;
+    }
+
+    # Built SPA (frontend/dist), same origin as the API, so connect-src 'self' suffices.
+    root /srv/psychogram/frontend/dist;
+    location / {
+        try_files $uri /index.html;
+        add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: https://api.iconify.design; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer" always;
+    }
+}
+
+# /etc/nginx/psychogram_proxy_params
+#   proxy_set_header Host $host;
+#   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#   proxy_set_header X-Forwarded-Proto $scheme;
+#   proxy_request_buffering on;
+#   proxy_read_timeout 60s;

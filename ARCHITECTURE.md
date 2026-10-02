@@ -8,8 +8,8 @@ bo'yicha qo'llanma — [README.md](README.md), metodika kontrakti va UX talablar
 > **Joriy yo'nalish:** pilot MVP qisqartirish topshirig'i —
 > [docs/08_mvp_pilot_scope.md](docs/08_mvp_pilot_scope.md). A–E bosqichlarining kod qismi
 > bajarilgan (`closed` holati, `POST /researches/{id}/close`, `GET /researches/{id}/export`);
-> B (haqiqiy metodika paketi, [docs/10](docs/10_methodology_package.md)) va F (PostgreSQL pilot,
-> backup/restore) ochiq.
+> B (haqiqiy metodika paketi, [docs/10](docs/10_methodology_package.md)) ochiq; F bosqichining
+> lokal qismi bajarilgan — [docs/11](docs/11_pilot_operations.md).
 
 ---
 
@@ -95,6 +95,8 @@ psychogram/
 │       └── pii.py               # AES-GCM PII saqlash
 ├── alembic/versions/            # 0001_initial, 0002_pii_aes_gcm_envelope
 ├── config/settings.py           # Eski import yo'li uchun re-export
+├── deploy/                      # postgres/app_role.sql, nginx/psychogram.conf.example
+├── scripts/                     # pilot_smoke.py, compare_databases.py
 ├── tests/                       # pytest (65 funksiya, 74 holat)
 ├── frontend/                    # React SPA
 └── docs/                        # 01..07 mahsulot, metodika, UX, QA hujjatlari
@@ -702,6 +704,7 @@ Dev server: Vite `:5173`, `/api` va `/health` → `http://127.0.0.1:8000` proxy.
 | `tests/test_config.py` (6) | production secret, bootstrap token validatsiyasi, registratsiya default o'chiq |
 | `tests/test_migrations.py` (2) | toza `upgrade head` va 0001→0002 |
 | `tests/test_research_close.py` (4) | yopish, hisoblanmagan javoblar soni va tasdiq, yopilgandan keyingi bloklar, rol |
+| PostgreSQL | `PSYCHOGRAM_TEST_DATABASE_URL` berilsa API testlari shu bazada ishlaydi (74 passed, PostgreSQL 18) |
 | `tests/test_research_export.py` (6) | qator tarkibi va hisobotlar, eskirgan natija chiqmasligi, formula himoyasi, 105 respondent, litsenziya, rol va tenant |
 | `frontend/src/**/*.test.ts(x)` (54) | api client, capability siyosati, UI, Drawer, ErrorBoundary, pilot menyusi va flag'lar, tadqiqotni yaratish va boshlash, sessiya tugashi, javob formasi (rozilik, qoralama, savol yonidagi xatolar, dublikatsiz qayta urinish, tuzatish sababi), javoblar ro'yxati, tadqiqotni yakunlash, CSV yuklash, eskirgan natija belgisi, flows, import safety |
 

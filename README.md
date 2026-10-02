@@ -51,6 +51,14 @@ Konfiguratsiya ataylab `PSYCHOGRAM_` prefiksidan foydalanadi; bu host tizimidagi
 
 PostgreSQL ham shu migration va model metadata bilan ishlaydi. Production DB useriga faqat zarur schema huquqlarini bering; audit/result/revision jadvallariga to'g'ridan-to'g'ri application tashqarisidan yozishni cheklash tavsiya etiladi.
 
+## Pilot ekspluatatsiyasi
+
+Production o'rnatish, cheklangan `psychogram_app` PostgreSQL roli
+([deploy/postgres/app_role.sql](deploy/postgres/app_role.sql)), backup/tiklash, rollback,
+proxy talablari va qabul sinovlari dalillari: [docs/11_pilot_operations.md](docs/11_pilot_operations.md).
+Test to'plamini PostgreSQL'da ishga tushirish: `PSYCHOGRAM_TEST_DATABASE_URL=postgresql+psycopg2://… pytest -q`
+(bo'sh, bir martalik baza; har test sxemani qayta yaratadi).
+
 ## Birinchi bootstrap oqimi
 
 Bootstrap default holatda, jumladan productionda, **o'chiq**. Deployment operatori
