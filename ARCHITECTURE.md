@@ -6,9 +6,10 @@ bo'yicha qo'llanma — [README.md](README.md), metodika kontrakti va UX talablar
 [docs/](docs/).
 
 > **Joriy yo'nalish:** pilot MVP qisqartirish topshirig'i —
-> [docs/08_mvp_pilot_scope.md](docs/08_mvp_pilot_scope.md). Unda taklif qilingan
-> `closed` holati, `POST /researches/{id}/close` va `GET /researches/{id}/export?format=csv`
-> hali **implementatsiya qilinmagan**; quyidagi bo'limlar kodning hozirgi holatini tasvirlaydi.
+> [docs/08_mvp_pilot_scope.md](docs/08_mvp_pilot_scope.md). A–E bosqichlarining kod qismi
+> bajarilgan (`closed` holati, `POST /researches/{id}/close`, `GET /researches/{id}/export`);
+> B (haqiqiy metodika paketi, [docs/10](docs/10_methodology_package.md)) va F (PostgreSQL pilot,
+> backup/restore) ochiq.
 
 ---
 
@@ -94,7 +95,7 @@ psychogram/
 │       └── pii.py               # AES-GCM PII saqlash
 ├── alembic/versions/            # 0001_initial, 0002_pii_aes_gcm_envelope
 ├── config/settings.py           # Eski import yo'li uchun re-export
-├── tests/                       # pytest (54 funksiya, 63 holat)
+├── tests/                       # pytest (65 funksiya, 74 holat)
 ├── frontend/                    # React SPA
 └── docs/                        # 01..07 mahsulot, metodika, UX, QA hujjatlari
 ```
@@ -424,7 +425,10 @@ Versiyalar: `ENGINE_VERSION="psychogram-scoring/1"`, `INTERPRETER_VERSION="json-
 -> (ConsentRecord, LicenceRevision)` — `require_valid_consent` + `check_licence`; `calculate`,
 `GET /results/{id}` va eksport umumiy ishlatadi.
 
-`result_view(db, result) -> dict` — natija + scale'lar + trace qadamlari (API/export uchun).
+`result_view(db, result) -> dict` — natija + scale'lar + trace qadamlari (API/export uchun), shuningdek
+`participant_code`, `methodology_name`, `version_code` va `is_current`.
+
+`is_current_result(db, result, response=None)` — natija revisioni hali response'ning joriy revisionimi.
 
 `_effective_disclosure(licence)` — `summary_only` → `summary_only`; `derived_only` yoki
 `allow_trace_item_values=false` → `derived_only`; aks holda `full`.
@@ -458,6 +462,9 @@ Yordamchilar: `_parse_cell(item, cell)` (integer/decimal/`true|false`/option cod
 - `csv_safe(value)` — `= + - @ \t \r` bilan boshlansa `'` qo'shadi (formula injection himoyasi).
 - `build_json_export(db, result, disclosure_level)` — `result_view` + `calculated_at`,
   `export_disclosure_level`, `disclaimer`, redakt qilingan trace.
+- `build_research_csv(db, tenant, research) -> ResearchExport` — tadqiqot bo'yicha CSV: har
+  respondentga bitta qator, faqat joriy revision natijasi; litsenziya yaroqsiz bo'lsa butunlay rad;
+  roziligi yaroqsizlar chiqarilib sanaladi; BOM + CRLF; matn ustunlari `csv_safe`, ballar son.
 - `build_csv_export(db, result, disclosure_level)` — meta qatorlar + scale jadvali
   (`uz-Latn` interpretatsiya, disclaimer har qatorda), CRLF.
 - `redact_trace(trace, disclosure_level)` — `summary_only`: item qadamlari olib tashlanadi;
@@ -492,14 +499,14 @@ operator/auditor), `MemberView`, `MethodologyCreate`, `MethodologyView`,
 `ResearchCreate`, `ResearchView` (+ `consent_reference`, `consent_version`), `ParticipantCreate`, `ParticipantView`, `ConsentCreate`,
 `ConsentView`, `ResponseCreate`, `RevisionCreate` (`correction_reason` — ixtiyoriy,
 `expected_lock_version`), `ValidationIssueView`, `RevisionView` (+ `validation_issues`), `ResponseView`, `CalculationRequest`
-(`response_revision_id`, `idempotency_key`), `ScaleResultView`, `ResultView`,
+(`response_revision_id`, `idempotency_key`), `ScaleResultView`, `ResultView` (+ `participant_code`, `response_id`, `is_current`, `methodology_name`, `version_code`), `CloseResearchRequest`,
 `CSVPreviewRequest`, `ImportPreviewView`, `ImportConfirmRequest`, `ImportConfirmView`.
 
 **`schemas/read.py` (read-model):** `RetentionPolicyView`, `LicenceDetailView`,
 `MethodologyVersionDetailView` (+ `methodology_code`, `methodology_name`), `MethodologyDetailView`, `ParticipantListItem`,
 `ParticipantPage`, `ParticipantDetailView`, `ConsentHistoryItem`, `ConsentHistoryView`,
 `RevisionDetailView` (+ `validation_issues`), `ResponseListItem` (+ `result_status`: not_calculated / calculated / recalculation_required, `current_result_id`), `ResponsePage`, `ResponseDetailView`,
-`RevisionHistoryView`, `ResultSummaryView`, `ResultPage`, `PIIWrite`, `PIIView`.
+`RevisionHistoryView`, `ResultSummaryView` (+ `is_current`), `ResultPage`, `PIIWrite`, `PIIView`.
 Sahifalash: `offset ≥ 0`, `limit` 1..100 (default 50).
 
 ## 8. REST API (`/api/v1`)
@@ -531,6 +538,7 @@ Tenant endpointlari uchun headerlar: `Authorization: Bearer <token>` va
 | GET | `/researches` | member | — |
 | POST | `/researches` | O, A, R | `create_research` |
 | POST | `/researches/{id}/activate` | O, A, R | `activate_research` |
+| POST | `/researches/{id}/close` | O, A, R | `close_research`; hisoblanmagan javoblar bo'lsa `confirm_uncalculated` talab qilinadi |
 | POST | `/researches/{id}/participants` | O, A, R, Op | `create_participant` |
 | POST | `/participants/{id}/consents` | O, A, R, Op | `record_consent` |
 | POST | `/researches/{id}/responses` | O, A, R, Op | `create_response` |
@@ -560,6 +568,7 @@ Tenant endpointlari uchun headerlar: `Authorization: Bearer <token>` va
 | GET | `/responses/{id}/revisions` | member | |
 | GET | `/responses/{id}/revisions/{rid}` | member | |
 | GET | `/results?research_id=&participant_id=&response_revision_id=` | O, A, R, Au | sahifalangan |
+| GET | `/researches/{id}/export?format=csv` | O, A, R | `build_research_csv`; `X-Export-Rows`, `X-Export-Not-Calculated`, `X-Export-Excluded-Consent` |
 | GET | `/results/{id}/export?format=json\|csv` | O, A, R | consent + licence qayta tekshiriladi; `xlsx/pdf` → 415 |
 | PUT / GET / DELETE | `/researches/{id}/participants/{pid}/pii` | `pii_access` | AES-GCM, audit |
 
@@ -577,8 +586,11 @@ Read router yordamchilari: `_catalog_tenant`, `_visible_versions`, `_version_det
 MethodologyVersion:  draft ─► in_review ─► published ─► deprecated / withdrawn
                      (published dan keyin snapshot immutable)
 
-Research:            ready ──activate──► active
-                     (create'da darhol "ready"; pin active bo'lgach o'zgarmaydi)
+Research:            ready ──activate──► active ──close──► closed
+                     (create'da darhol "ready"; pin active/closed'da o'zgarmaydi;
+                      closed: yangi respondent, javob, tahrir, validate, hisoblash va
+                      rozilik berish bloklanadi; o'qish, eksport va rozilikni qaytarib
+                      olish ochiq; qayta ochilmaydi)
 
 Response/Revision:   draft ──validate──► validated ──calculate──► (response) scored
                           └──────────► validation_failed
@@ -667,7 +679,7 @@ oldin to'xtaydi; "Saqlandi" faqat server javobidan keyin. Operator "Tekshirish" 
 
 | Capability | Rollar |
 |---|---|
-| `research:create`, `research:activate`, `result:calculate` | owner, admin, researcher |
+| `research:create`, `research:activate`, `research:close`, `result:calculate` | owner, admin, researcher |
 | `participant:write`, `response:write` | owner, admin, researcher, operator |
 | `result:read` | owner, admin, researcher, auditor |
 | `result:export` | owner, admin, researcher |
@@ -683,13 +695,15 @@ Dev server: Vite `:5173`, `/api` va `/health` → `http://127.0.0.1:8000` proxy.
 
 | Fayl | Qamrov |
 |---|---|
-| `tests/test_api.py` (19) | bootstrap, generic login, scoring + disclaimer + idempotency, RBAC va cross-tenant, consent/pin gate'lar, revision immutability, revoked licence, cache/natija o'qishda consent va licence gate'i, takroriy participant/retention kodi 409, har bir savol bo'yicha validatsiya xatolari, tuzatish sababi qoidasi, ro'yxatdagi natija holati, summary_only redaksiya, CSV + PII |
+| `tests/test_api.py` (20) | bootstrap, generic login, scoring + disclaimer + idempotency, RBAC va cross-tenant, consent/pin gate'lar, revision immutability, revoked licence, cache/natija o'qishda consent va licence gate'i, takroriy participant/retention kodi 409, har bir savol bo'yicha validatsiya xatolari, tuzatish sababi qoidasi, ro'yxatdagi natija holati, summary_only redaksiya, CSV + PII |
 | `tests/test_scoring.py` (11) | kontrakt vektorlari, insufficient data, validatsiya kodlari, norm chegaralari, half-up, AST xavfsizligi va limitlari, division by zero, norm overlap |
 | `tests/test_security_release.py` (7) | bootstrap gate, export RBAC, security headerlar, CSV encoding/hajm, version detail kontekst, yopiq registratsiya + admin tashkilot yaratishi, CSV import flag'i |
 | `tests/test_ux_backend_gaps.py` (9) | read-model'lar, pagination, JSON/CSV export, formula-safe CSV, PII AES-GCM, fail-closed, legal hold |
 | `tests/test_config.py` (6) | production secret, bootstrap token validatsiyasi, registratsiya default o'chiq |
 | `tests/test_migrations.py` (2) | toza `upgrade head` va 0001→0002 |
-| `frontend/src/**/*.test.ts(x)` (48) | api client, capability siyosati, UI, Drawer, ErrorBoundary, pilot menyusi va flag'lar, tadqiqotni yaratish va boshlash, sessiya tugashi, javob formasi (rozilik, qoralama, savol yonidagi xatolar, dublikatsiz qayta urinish, tuzatish sababi), javoblar ro'yxati, flows, import safety |
+| `tests/test_research_close.py` (4) | yopish, hisoblanmagan javoblar soni va tasdiq, yopilgandan keyingi bloklar, rol |
+| `tests/test_research_export.py` (6) | qator tarkibi va hisobotlar, eskirgan natija chiqmasligi, formula himoyasi, 105 respondent, litsenziya, rol va tenant |
+| `frontend/src/**/*.test.ts(x)` (54) | api client, capability siyosati, UI, Drawer, ErrorBoundary, pilot menyusi va flag'lar, tadqiqotni yaratish va boshlash, sessiya tugashi, javob formasi (rozilik, qoralama, savol yonidagi xatolar, dublikatsiz qayta urinish, tuzatish sababi), javoblar ro'yxati, tadqiqotni yakunlash, CSV yuklash, eskirgan natija belgisi, flows, import safety |
 
 Ishga tushirish: `pytest -q`; frontend — `npm run typecheck && npm run lint && npm run test && npm run build`.
 
@@ -700,7 +714,7 @@ Ishga tushirish: `pytest -q`; frontend — `npm run typecheck && npm run lint &&
 | Auth | `REGISTRATION_DISABLED`, `AUTH_REQUIRED`, `AUTH_TOKEN_INVALID`, `AUTH_CREDENTIALS_INVALID`, `PASSWORD_TOO_WEAK`, `BOOTSTRAP_DISABLED`, `BOOTSTRAP_TOKEN_INVALID`, `BOOTSTRAP_ALREADY_COMPLETED`, `EMAIL_ALREADY_REGISTERED` |
 | Tenant / RBAC | `TENANT_ACCESS_DENIED`, `ROLE_FORBIDDEN`, `ORGANIZATION_CODE_EXISTS`, `ORGANIZATION_CONTEXT_REQUIRED`, `MEMBERSHIP_EXISTS` |
 | Registr | `METHODOLOGY_CODE_EXISTS`, `METHODOLOGY_NOT_FOUND`, `METHODOLOGY_VERSION_EXISTS`, `METHODOLOGY_VERSION_NOT_FOUND`, `METHODOLOGY_SCHEMA_INVALID`, `METHODOLOGY_NOT_PUBLISHED`, `VERSION_STATE_INVALID`, `LICENCE_METADATA_REQUIRED`, `LICENCE_NOT_VALID`, `LICENCE_NOT_FOUND`, `NORM_OVERLAP` |
-| Research | `RESEARCH_NOT_FOUND`, `RESEARCH_STATE_INVALID`, `RESEARCH_NOT_ACTIVE`, `RETENTION_POLICY_NOT_FOUND`, `RETENTION_POLICY_CODE_EXISTS`, `NORM_PIN_INVALID`, `RESEARCH_METHODOLOGY_MISMATCH`, `RESEARCH_USE_TYPE_INVALID` |
+| Research | `RESEARCH_NOT_FOUND`, `RESEARCH_STATE_INVALID`, `RESEARCH_HAS_UNCALCULATED_RESPONSES`, `RESEARCH_NOT_ACTIVE`, `RETENTION_POLICY_NOT_FOUND`, `RETENTION_POLICY_CODE_EXISTS`, `NORM_PIN_INVALID`, `RESEARCH_METHODOLOGY_MISMATCH`, `RESEARCH_USE_TYPE_INVALID` |
 | Yig'ish | `CORRECTION_REASON_REQUIRED`, `PARTICIPANT_NOT_FOUND`, `CONSENT_BASIS_REQUIRED`, `CONSENT_NOT_VALID`, `RESPONSE_NOT_FOUND`, `RESPONSE_ATTEMPT_EXISTS`, `PARTICIPANT_CODE_EXISTS`, `REVISION_CONFLICT`, `REVISION_NOT_FOUND`, `REVISION_NOT_CURRENT` |
 | Validatsiya | `UNKNOWN_ITEM`, `ITEM_REQUIRED`, `TYPE_INVALID`, `BOOLEAN_LITERAL_INVALID`, `OPTION_NOT_ALLOWED`, `VALUE_OUT_OF_RANGE`, `STEP_INVALID` |
 | Scoring | `RESPONSE_NOT_VALIDATED`, `METHODOLOGY_HASH_MISMATCH`, `IDEMPOTENCY_KEY_REUSED`, `CALCULATION_IN_PROGRESS`, `RESEARCH_CHANGED_DURING_RUN`, `CONSENT_CHANGED_DURING_RUN`, `LICENCE_CHANGED_DURING_RUN`, `MAPPING_NOT_FOUND`, `SCORE_OUT_OF_RANGE`, `RULE_SCHEMA_INVALID`, `RULE_LIMIT_EXCEEDED`, `DIVISION_BY_ZERO`, `RESULT_NOT_FOUND` |
