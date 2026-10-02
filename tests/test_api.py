@@ -445,7 +445,9 @@ def test_validation_issues_are_returned_per_item(prepared):
         {"item_code": "q9", "error_code": "UNKNOWN_ITEM", "safe_params": {}},
     ]
 
-    validated = client.post(f"/api/v1/responses/{response_id}/validate", headers=headers)
+    validated = client.post(
+        f"/api/v1/responses/{response_id}/validate", headers=headers
+    )
     assert validated.status_code == 200, validated.text
     assert validated.json()["status"] == "validation_failed"
     assert validated.json()["validation_issues"] == expected
