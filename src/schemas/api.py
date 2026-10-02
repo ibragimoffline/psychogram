@@ -224,6 +224,12 @@ class RevisionCreate(APIModel):
     finalize: bool = False
 
 
+class ValidationIssueView(APIModel):
+    item_code: str | None
+    error_code: str
+    safe_params: dict[str, Any]
+
+
 class RevisionView(APIModel):
     id: str
     response_id: str
@@ -231,6 +237,7 @@ class RevisionView(APIModel):
     status: str
     answer_payload_hash: str
     validation_summary: dict[str, Any]
+    validation_issues: list[ValidationIssueView] = Field(default_factory=list)
 
 
 class ResponseView(APIModel):

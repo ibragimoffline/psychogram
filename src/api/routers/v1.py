@@ -59,6 +59,7 @@ from src.schemas.api import (
     RetentionPolicyCreate,
     RevisionCreate,
     RevisionView,
+    ValidationIssueView,
 )
 from src.services.domain import (
     activate_research,
@@ -69,6 +70,7 @@ from src.services.domain import (
     record_consent,
     revise_response,
     validate_revision,
+    validation_issues,
 )
 from src.services.imports import confirm_import, preview_csv
 from src.services.orchestration import (
@@ -404,7 +406,7 @@ def response_revise(
     revision = revise_response(db, response, payload, actor.id)
     db.commit()
     db.refresh(revision)
-    return revision
+    return _revision_view(db, revision)
 
 
 @router.post(
@@ -425,7 +427,7 @@ def response_validate(
     validate_revision(db, response, revision, actor.id)
     db.commit()
     db.refresh(revision)
-    return revision
+    return _revision_view(db, revision)
 
 
 @router.post(
@@ -582,6 +584,17 @@ def _research(db: Session, context: TenantContext, research_id: str) -> Research
     if not research:
         raise DomainError("RESEARCH_NOT_FOUND", "Research was not found", 404)
     return research
+
+
+def _revision_view(db: Session, revision: ResponseRevision) -> RevisionView:
+    return RevisionView.model_validate(revision).model_copy(
+        update={
+            "validation_issues": [
+                ValidationIssueView.model_validate(issue)
+                for issue in validation_issues(db, revision.id)
+            ]
+        }
+    )
 
 
 def _response(db: Session, context: TenantContext, response_id: str) -> Response:

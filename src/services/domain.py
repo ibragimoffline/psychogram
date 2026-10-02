@@ -572,6 +572,18 @@ def _new_revision(
     return revision
 
 
+def validation_issues(db: Session, revision_id: str) -> list[ResponseValidationIssue]:
+    return list(
+        db.scalars(
+            select(ResponseValidationIssue)
+            .where(ResponseValidationIssue.response_revision_id == revision_id)
+            .order_by(
+                ResponseValidationIssue.item_code, ResponseValidationIssue.error_code
+            )
+        ).all()
+    )
+
+
 def validate_revision(
     db: Session, response: Response, revision: ResponseRevision, actor_id: str
 ) -> ResponseRevision:
@@ -579,7 +591,9 @@ def validate_revision(
         raise DomainError(
             "REVISION_NOT_CURRENT", "Only the current revision can be validated", 409
         )
-    if revision.status == "validated":
+    # Answers and snapshot are immutable, so the outcome is final; re-running would only
+    # duplicate the stored issues.
+    if revision.status in {"validated", "validation_failed"}:
         return revision
     require_valid_consent(db, response.participant_id)
     version = db.get(MethodologyVersion, response.methodology_version_id)

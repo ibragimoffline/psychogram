@@ -35,7 +35,7 @@ from src.models.domain import (
     ScaleResult,
     User,
 )
-from src.schemas.api import ScaleResultView
+from src.schemas.api import ScaleResultView, ValidationIssueView
 from src.schemas.read import (
     ConsentHistoryItem,
     ConsentHistoryView,
@@ -57,6 +57,7 @@ from src.schemas.read import (
     RevisionHistoryView,
 )
 from src.services.audit import audit
+from src.services.domain import validation_issues
 from src.services.exports import build_csv_export, build_json_export
 from src.services.orchestration import _effective_disclosure, require_result_policy
 from src.services.pii import delete_pii, upsert_pii, view_pii
@@ -411,7 +412,7 @@ def response_detail(
         **item.model_dump(),
         methodology_version_id=response.methodology_version_id,
         current_revision=(
-            _revision_detail(revision, response, raw_allowed) if revision else None
+            _revision_detail(db, revision, response, raw_allowed) if revision else None
         ),
     )
 
@@ -445,7 +446,7 @@ def revisions(
     return RevisionHistoryView(
         response_id=response.id,
         current_revision_id=response.current_revision_id,
-        revisions=[_revision_detail(row, response, raw_allowed) for row in rows],
+        revisions=[_revision_detail(db, row, response, raw_allowed) for row in rows],
     )
 
 
@@ -477,7 +478,7 @@ def revision_detail(
         "researcher",
         "operator",
     }
-    return _revision_detail(revision, response, raw_allowed)
+    return _revision_detail(db, revision, response, raw_allowed)
 
 
 @router.get("/results", response_model=ResultPage, tags=["results"])
@@ -940,6 +941,7 @@ def _response_item(db: Session, response: ResponseModel) -> ResponseListItem:
 
 
 def _revision_detail(
+    db: Session,
     revision: ResponseRevision,
     response: ResponseModel,
     raw_allowed: bool,
@@ -959,6 +961,10 @@ def _revision_detail(
         validated_by=revision.validated_by,
         answers=revision.answers if raw_allowed else None,
         is_current=response.current_revision_id == revision.id,
+        validation_issues=[
+            ValidationIssueView.model_validate(issue)
+            for issue in validation_issues(db, revision.id)
+        ],
     )
 
 

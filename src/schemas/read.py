@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import Field, field_validator
 
-from src.schemas.api import APIModel, ScaleResultView
+from src.schemas.api import APIModel, ScaleResultView, ValidationIssueView
 
 
 class RetentionPolicyView(APIModel):
@@ -124,6 +124,7 @@ class RevisionDetailView(APIModel):
     validated_by: str | None
     answers: dict[str, Any] | None
     is_current: bool
+    validation_issues: list[ValidationIssueView]
 
 
 class ResponseListItem(APIModel):

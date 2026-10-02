@@ -426,6 +426,56 @@ def test_duplicate_retention_code_is_conflict_not_server_error(prepared):
     assert same_code.status_code == 201, same_code.text
 
 
+def test_validation_issues_are_returned_per_item(prepared):
+    client = prepared["client"]
+    headers = bearer(prepared["owner_token"], prepared["organization_id"])
+    created = client.post(
+        f"/api/v1/researches/{prepared['research']['id']}/responses",
+        headers=headers,
+        json={
+            "participant_id": prepared["participant"]["id"],
+            "answers": {"q1": 9, "q2": "two", "q3": 1, "q9": 1},
+        },
+    )
+    assert created.status_code == 201, created.text
+    response_id = created.json()["id"]
+    expected = [
+        {"item_code": "q1", "error_code": "VALUE_OUT_OF_RANGE", "safe_params": {}},
+        {"item_code": "q2", "error_code": "TYPE_INVALID", "safe_params": {}},
+        {"item_code": "q9", "error_code": "UNKNOWN_ITEM", "safe_params": {}},
+    ]
+
+    validated = client.post(f"/api/v1/responses/{response_id}/validate", headers=headers)
+    assert validated.status_code == 200, validated.text
+    assert validated.json()["status"] == "validation_failed"
+    assert validated.json()["validation_issues"] == expected
+
+    again = client.post(f"/api/v1/responses/{response_id}/validate", headers=headers)
+    assert again.json()["validation_issues"] == expected
+    assert again.json()["validation_summary"]["error_count"] == 3
+
+    detail = client.get(f"/api/v1/responses/{response_id}", headers=headers).json()
+    assert detail["current_revision"]["validation_issues"] == expected
+    history = client.get(
+        f"/api/v1/responses/{response_id}/revisions", headers=headers
+    ).json()
+    assert history["revisions"][0]["validation_issues"] == expected
+
+    fixed = client.post(
+        f"/api/v1/responses/{response_id}/revisions",
+        headers=headers,
+        json={
+            "answers": {"q1": 3, "q2": 2, "q3": 1},
+            "correction_reason": "Fix entry",
+            "expected_lock_version": 1,
+            "finalize": True,
+        },
+    )
+    assert fixed.status_code == 201, fixed.text
+    assert fixed.json()["status"] == "validated"
+    assert fixed.json()["validation_issues"] == []
+
+
 def test_summary_only_licence_redacts_item_trace(prepared):
     licence = prepared["client"].post(
         f"/api/v1/methodology-versions/{prepared['version']['id']}/licences",
