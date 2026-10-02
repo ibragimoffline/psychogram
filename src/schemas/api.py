@@ -179,6 +179,8 @@ class ResearchView(APIModel):
     methodology_version_id: str
     pii_mode: str
     use_type: Literal["research", "education", "clinical"]
+    consent_reference: str
+    consent_version: str
 
 
 class ParticipantCreate(APIModel):

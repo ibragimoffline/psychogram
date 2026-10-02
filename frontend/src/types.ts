@@ -1,14 +1,14 @@
 export type Role = 'owner' | 'admin' | 'researcher' | 'operator' | 'auditor'
 export interface Membership { organization_id: string; organization_name: string; role: Role; can_view_pii: boolean }
 export interface Me { id: string; email: string; full_name: string; is_platform_admin: boolean; memberships: Membership[] }
-export interface Research { id: string; tenant_id: string; name: string; purpose: string; status: string; methodology_version_id: string; pii_mode: string }
+export interface Research { id: string; tenant_id: string; name: string; purpose: string; status: string; methodology_version_id: string; pii_mode: string; consent_reference: string; consent_version: string }
 export interface Retention { id: string; code: string; retention_days: number; active: boolean; created_at: string }
 export interface Licence { id: string; status: string; content_disclosure_level: string; allow_item_display: boolean; eligible: boolean; restrictions_i18n: Record<string,string> }
 export interface InstrumentItem { item_code: string; item_type: 'integer'|'decimal'|'boolean'|'single_choice'|string; required: boolean; value_constraints?: Record<string, unknown>; prompt_i18n?: Record<string,string>; options?: {option_code:string;label_i18n:Record<string,string>}[] }
 export interface Version { id:string; methodology_id:string; methodology_code:string; methodology_name:string; version_code:string; lifecycle_status:string; estimated_minutes:number; content_hash:string|null; snapshot:{items?:InstrumentItem[];scales?:Record<string,unknown>[]} | null; licence:Licence|null; eligible:boolean; disclaimer_i18n:Record<string,string> }
 export interface Participant { id:string;research_id:string;external_code:string;processing_status:string;created_at:string;current_consent_status:string|null;has_pii:boolean }
 export interface Page<T>{items:T[];total:number;offset:number;limit:number}
-export interface ResponseItem {id:string;research_id:string;participant_id:string;participant_external_code:string;attempt_key:string;status:string;lock_version:number;current_revision_id:string|null;current_revision_number:number|null;current_revision_status:string|null;created_at:string}
+export interface ResponseItem {id:string;research_id:string;participant_id:string;participant_external_code:string;attempt_key:string;status:string;lock_version:number;current_revision_id:string|null;current_revision_number:number|null;current_revision_status:string|null;created_at:string;result_status:'not_calculated'|'calculated'|'recalculation_required';current_result_id:string|null}
 export interface ValidationIssue {item_code:string|null;error_code:string;safe_params:Record<string,unknown>}
 export interface Revision {id:string;response_id:string;revision_number:number;status:string;answer_payload_hash:string;validation_summary:Record<string,unknown>;answers:Record<string,unknown>|null;is_current:boolean;correction_reason:string|null;created_at:string;source_type:string;validation_issues:ValidationIssue[]}
 export interface ResponseDetail extends ResponseItem {methodology_version_id:string;current_revision:Revision|null}

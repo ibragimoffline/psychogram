@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
@@ -141,6 +141,10 @@ class ResponseListItem(APIModel):
     current_revision_number: int | None
     current_revision_status: str | None
     created_at: datetime
+    # calculated: a result exists for the current revision; recalculation_required:
+    # only earlier revisions have results, so none of them is current.
+    result_status: Literal["not_calculated", "calculated", "recalculation_required"]
+    current_result_id: str | None
 
 
 class ResponsePage(APIModel):

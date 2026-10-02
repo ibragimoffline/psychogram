@@ -529,6 +529,49 @@ def test_correction_reason_is_required_only_for_validated_answers(prepared):
     assert corrected.status_code == 201, corrected.text
 
 
+def test_response_list_reports_whether_the_current_revision_is_calculated(prepared):
+    client = prepared["client"]
+    headers = bearer(prepared["owner_token"], prepared["organization_id"])
+    list_url = f"/api/v1/researches/{prepared['research']['id']}/responses"
+
+    def listed():
+        items = client.get(list_url, headers=headers).json()["items"]
+        assert len(items) == 1
+        return items[0]["result_status"], items[0]["current_result_id"]
+
+    response = create_response(prepared)
+    assert listed() == ("not_calculated", None)
+    first = calculate(prepared, response["current_revision_id"], "list-first").json()
+    assert listed() == ("calculated", first["id"])
+
+    revised = client.post(
+        f"/api/v1/responses/{response['id']}/revisions",
+        headers=headers,
+        json={
+            "answers": {"q1": 3, "q2": 0, "q3": 1, "q4": 0},
+            "correction_reason": "Kiritishdagi xato",
+            "expected_lock_version": response["lock_version"],
+            "finalize": True,
+        },
+    ).json()
+    assert listed() == ("recalculation_required", None)
+    second = calculate(prepared, revised["id"], "list-second").json()
+    assert listed() == ("calculated", second["id"])
+
+
+def test_research_view_exposes_consent_reference(prepared):
+    researches = (
+        prepared["client"]
+        .get(
+            "/api/v1/researches",
+            headers=bearer(prepared["owner_token"], prepared["organization_id"]),
+        )
+        .json()
+    )
+    assert researches[0]["consent_reference"] == "CONSENT-TEST"
+    assert researches[0]["consent_version"] == "1"
+
+
 def test_summary_only_licence_redacts_item_trace(prepared):
     licence = prepared["client"].post(
         f"/api/v1/methodology-versions/{prepared['version']['id']}/licences",

@@ -930,6 +930,29 @@ def _response_item(db: Session, response: ResponseModel) -> ResponseListItem:
         if response.current_revision_id
         else None
     )
+    current_result = (
+        db.scalar(
+            select(Result)
+            .where(
+                Result.tenant_id == response.tenant_id,
+                Result.response_revision_id == response.current_revision_id,
+            )
+            .order_by(Result.calculated_at.desc())
+        )
+        if response.current_revision_id
+        else None
+    )
+    result_status: Literal["not_calculated", "calculated", "recalculation_required"]
+    if current_result:
+        result_status = "calculated"
+    elif db.scalar(
+        select(Result.id).where(
+            Result.tenant_id == response.tenant_id, Result.response_id == response.id
+        )
+    ):
+        result_status = "recalculation_required"
+    else:
+        result_status = "not_calculated"
     return ResponseListItem(
         id=response.id,
         research_id=response.research_id,
@@ -942,6 +965,8 @@ def _response_item(db: Session, response: ResponseModel) -> ResponseListItem:
         current_revision_number=revision.revision_number if revision else None,
         current_revision_status=revision.status if revision else None,
         created_at=response.created_at,
+        result_status=result_status,
+        current_result_id=current_result.id if current_result else None,
     )
 
 
