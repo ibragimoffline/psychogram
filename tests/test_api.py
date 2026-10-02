@@ -478,6 +478,57 @@ def test_validation_issues_are_returned_per_item(prepared):
     assert fixed.json()["validation_issues"] == []
 
 
+def test_correction_reason_is_required_only_for_validated_answers(prepared):
+    client = prepared["client"]
+    headers = bearer(prepared["owner_token"], prepared["organization_id"])
+    draft = client.post(
+        f"/api/v1/researches/{prepared['research']['id']}/responses",
+        headers=headers,
+        json={"participant_id": prepared["participant"]["id"], "answers": {"q1": 1}},
+    ).json()
+    resaved = client.post(
+        f"/api/v1/responses/{draft['id']}/revisions",
+        headers=headers,
+        json={"answers": {"q1": 2, "q2": 1}, "expected_lock_version": 1},
+    )
+    assert resaved.status_code == 201, resaved.text
+    assert resaved.json()["status"] == "draft"
+    assert resaved.json()["revision_number"] == 2
+
+    finalized = client.post(
+        f"/api/v1/responses/{draft['id']}/revisions",
+        headers=headers,
+        json={
+            "answers": {"q1": 2, "q2": 1, "q3": 0},
+            "expected_lock_version": 2,
+            "finalize": True,
+        },
+    )
+    assert finalized.json()["status"] == "validated", finalized.text
+    for reason in (None, "   "):
+        body: dict = {
+            "answers": {"q1": 3, "q2": 1, "q3": 0},
+            "expected_lock_version": 3,
+        }
+        if reason is not None:
+            body["correction_reason"] = reason
+        blocked = client.post(
+            f"/api/v1/responses/{draft['id']}/revisions", headers=headers, json=body
+        )
+        assert blocked.status_code == 400
+        assert blocked.json()["error"]["code"] == "CORRECTION_REASON_REQUIRED"
+    corrected = client.post(
+        f"/api/v1/responses/{draft['id']}/revisions",
+        headers=headers,
+        json={
+            "answers": {"q1": 3, "q2": 1, "q3": 0},
+            "correction_reason": "Kiritishdagi xato",
+            "expected_lock_version": 3,
+        },
+    )
+    assert corrected.status_code == 201, corrected.text
+
+
 def test_summary_only_licence_redacts_item_trace(prepared):
     licence = prepared["client"].post(
         f"/api/v1/methodology-versions/{prepared['version']['id']}/licences",

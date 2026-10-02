@@ -507,6 +507,13 @@ def revise_response(
     )
     if not current:
         raise DomainError("REVISION_NOT_FOUND", "Current revision is missing", 409)
+    # Saving a draft again is routine; changing answers that were already accepted is a
+    # correction and needs a stated reason.
+    if current.status == "validated" and not (payload.correction_reason or "").strip():
+        raise DomainError(
+            "CORRECTION_REASON_REQUIRED",
+            "A correction reason is required to change validated answers",
+        )
     revision = _new_revision(
         db,
         response,

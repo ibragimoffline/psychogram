@@ -219,7 +219,8 @@ class ResponseCreate(APIModel):
 
 class RevisionCreate(APIModel):
     answers: dict[str, Any]
-    correction_reason: str = Field(min_length=1, max_length=2000)
+    # Required by the service only when the current revision is already validated.
+    correction_reason: str | None = Field(default=None, min_length=1, max_length=2000)
     expected_lock_version: int = Field(ge=1)
     finalize: bool = False
 
