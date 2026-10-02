@@ -96,8 +96,9 @@ psychogram/
 ├── alembic/versions/            # 0001_initial, 0002_pii_aes_gcm_envelope
 ├── config/settings.py           # Eski import yo'li uchun re-export
 ├── deploy/                      # postgres/app_role.sql, nginx/psychogram.conf.example
-├── scripts/                     # pilot_smoke.py, compare_databases.py
-├── tests/                       # pytest (68 funksiya, 77 holat)
+├── scripts/                     # pilot_smoke.py, compare_databases.py, extract_big_five_texts.py
+├── methodologies/               # kod sifatidagi metodika tuzilmalari (big_five.py); private/ — litsenziyalangan matnlar, gitignore
+├── tests/                       # pytest (79 funksiya, 98 holat)
 ├── frontend/                    # React SPA
 └── docs/                        # 01..07 mahsulot, metodika, UX, QA hujjatlari
 ```

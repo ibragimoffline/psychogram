@@ -13,7 +13,7 @@ Yangi ish qo'shilganda shu faylning oxiriga yangi bo'lim yoziladi.
 |---|---|---|---|
 | Arxitektura xaritasi | Bajarildi | — | ha |
 | A — kod va hujjat solishtiruvi | Bajarildi | `fix/stage-a-gates` | ha |
-| B — haqiqiy metodika | **Kutilmoqda**: paket foydalanuvchidan keladi | — | — |
+| B — haqiqiy metodika | Katta beshlik kiritildi; publish huquqiy asos va psixolog tasdig'ini kutmoqda | `feat/big-five-methodology` | **yo'q** |
 | C — kirish, menyu, tadqiqot yaratish | Bajarildi | `feat/stage-c-onboarding` | ha |
 | D — javob formasi | Bajarildi | `feat/stage-d-response-flow` | ha |
 | E — yopish, umumiy CSV | Bajarildi | `feat/stage-e-close-export` | ha |
@@ -57,7 +57,7 @@ ko'rinib, server rad etardi; loyiha git'da emas edi.
 
 - [10_methodology_package.md](10_methodology_package.md) — metodika egasi tayyorlashi kerak
   bo'lgan paket talablari (savollar, kalit, shkalalar, norma, litsenziya, ≥3 etalon misol).
-- **Ochiq:** paket hali kelmagan. Hozir faqat sintetik test metodikasi bor.
+- 2026-10-02: "Katta beshlik" paketi keldi; qabul hujjati — [13_big_five_intake.md](13_big_five_intake.md).
 
 ## C bosqichi — kirish, menyu, tadqiqot yaratish
 
@@ -130,9 +130,22 @@ tiklash → 34/34 jadval mos, tiklangan bazada eksport bayt-ma-bayt bir xil.
 **Topilma:** Excel 16 va Windows `ru-RU` sozlamasida oddiy CSV bitta ustunga tushadi, `;` + nuqta
 varianti esa `3.33`ni jimgina sanaga aylantiradi. Tuzatilgan fayl o'sha Excel'da to'g'ri ochildi.
 
+## B bosqichi davomi — Katta beshlik
+
+| Commit | Nima |
+|---|---|
+| `0b1421e` | Kontrakt: `total` shkala ixtiyoriy, `factor` shkalalari; noma'lum savol va shkala normasi tekshiriladi (F-14) |
+| (keyingi) | `methodologies/big_five.py` (75 savol, 5 omil, 25 birlamchi omil, darajalar), matnlarni ajratish skripti, testlar, [13](13_big_five_intake.md) |
+
+**Topilmalar:** sarlavhada McCrae & Costa yozilgan, tuzilma esa Xromov 5PFQ'siga mos; IV omil
+yo'nalishi ikki joyda teskari yozilgan; 50-savol jufti ikki qutbli emas; darajalar normativ emas;
+litsenziya hujjati va javoblari bilan etalon misollar yo'q.
+**Muhim qaror:** repository ochiq, shuning uchun metodika matnlari git'ga kiritilmadi
+(`methodologies/private/`, gitignore).
+
 ## Ochiq masalalar
 
-1. **B:** haqiqiy metodika paketi va etalon misollar.
+1. **B (Katta beshlik):** huquqiy asos, psixolog tasdig'i, ≥3 mustaqil etalon misol, lotin matnini tekshirish ([13](13_big_five_intake.md), 5-bo'lim).
 2. **Haqiqiy server:** TLS, proxy (namuna sinalmagan), tiklash mashqini o'sha muhitda takrorlash.
 3. **Saqlash muddati:** mas'ul shaxs va o'chirish tartibi; MVP'da natijani o'chiradigan vosita yo'q.
 4. **MFA / login rate limit:** proxy yoki IdP darajasida.

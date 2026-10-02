@@ -15,3 +15,5 @@ dist/
 build/
 *.egg-info/
 .pytest-*/
+# Licensed methodology texts (statements, interpretations); never committed.
+methodologies/private/
