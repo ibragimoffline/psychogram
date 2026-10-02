@@ -150,6 +150,15 @@ def create_retention_policy(
     context: Annotated[TenantContext, Depends(roles("owner", "admin"))],
     db: Annotated[Session, Depends(get_db)],
 ):
+    if db.scalar(
+        select(RetentionPolicy).where(
+            RetentionPolicy.tenant_id == context.organization.id,
+            RetentionPolicy.code == payload.code,
+        )
+    ):
+        raise DomainError(
+            "RETENTION_POLICY_CODE_EXISTS", "Retention policy code already exists", 409
+        )
     policy = RetentionPolicy(
         tenant_id=context.organization.id,
         code=payload.code,

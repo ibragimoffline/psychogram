@@ -335,6 +335,18 @@ def create_participant(
             "Direct PII storage is disabled in this MVP deployment",
             409,
         )
+    if db.scalar(
+        select(Participant).where(
+            Participant.tenant_id == research.tenant_id,
+            Participant.research_id == research.id,
+            Participant.external_code == payload.external_code,
+        )
+    ):
+        raise DomainError(
+            "PARTICIPANT_CODE_EXISTS",
+            "Participant code already exists in this research",
+            409,
+        )
     participant = Participant(
         tenant_id=research.tenant_id,
         research_id=research.id,

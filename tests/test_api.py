@@ -363,6 +363,69 @@ def test_revoked_licence_blocks_cached_calculation_and_result_read(prepared):
     assert read.json()["error"]["code"] == "LICENCE_NOT_VALID"
 
 
+def test_duplicate_participant_code_is_conflict_not_server_error(prepared):
+    client = prepared["client"]
+    headers = bearer(prepared["owner_token"], prepared["organization_id"])
+    duplicate = client.post(
+        f"/api/v1/researches/{prepared['research']['id']}/participants",
+        headers=headers,
+        json={"external_code": prepared["participant"]["external_code"]},
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "PARTICIPANT_CODE_EXISTS"
+
+    other_research = client.post(
+        "/api/v1/researches",
+        headers=headers,
+        json={
+            "name": "Second study",
+            "purpose": "Codes are scoped per research",
+            "methodology_version_id": prepared["version"]["id"],
+            "consent_reference": "CONSENT-TEST",
+            "consent_version": "1",
+            "retention_policy_id": prepared["policy"]["id"],
+        },
+    ).json()
+    client.post(f"/api/v1/researches/{other_research['id']}/activate", headers=headers)
+    same_code = client.post(
+        f"/api/v1/researches/{other_research['id']}/participants",
+        headers=headers,
+        json={"external_code": prepared["participant"]["external_code"]},
+    )
+    assert same_code.status_code == 201, same_code.text
+
+
+def test_duplicate_retention_code_is_conflict_not_server_error(prepared):
+    client = prepared["client"]
+    duplicate = client.post(
+        "/api/v1/retention-policies",
+        headers=bearer(prepared["owner_token"], prepared["organization_id"]),
+        json={"code": prepared["policy"]["code"], "retention_days": 30},
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "RETENTION_POLICY_CODE_EXISTS"
+
+    other_token = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "other-owner@example.com",
+            "full_name": "Other Owner",
+            "password": "A-very-safe-other-password",
+            "organization_name": "Other Lab",
+            "organization_code": "other_lab",
+        },
+    ).json()["access_token"]
+    other_org = client.get("/api/v1/auth/me", headers=bearer(other_token)).json()[
+        "memberships"
+    ][0]["organization_id"]
+    same_code = client.post(
+        "/api/v1/retention-policies",
+        headers=bearer(other_token, other_org),
+        json={"code": prepared["policy"]["code"], "retention_days": 30},
+    )
+    assert same_code.status_code == 201, same_code.text
+
+
 def test_summary_only_licence_redacts_item_trace(prepared):
     licence = prepared["client"].post(
         f"/api/v1/methodology-versions/{prepared['version']['id']}/licences",
