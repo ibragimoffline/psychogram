@@ -97,7 +97,7 @@ psychogram/
 ├── config/settings.py           # Eski import yo'li uchun re-export
 ├── deploy/                      # postgres/app_role.sql, nginx/psychogram.conf.example
 ├── scripts/                     # pilot_smoke.py, compare_databases.py
-├── tests/                       # pytest (67 funksiya, 76 holat)
+├── tests/                       # pytest (68 funksiya, 77 holat)
 ├── frontend/                    # React SPA
 └── docs/                        # 01..07 mahsulot, metodika, UX, QA hujjatlari
 ```
@@ -468,9 +468,11 @@ Yordamchilar: `_parse_cell(item, cell)` (integer/decimal/`true|false`/option cod
 - `csv_safe(value)` — `= + - @ \t \r` bilan boshlansa `'` qo'shadi (formula injection himoyasi).
 - `build_json_export(db, result, disclosure_level)` — `result_view` + `calculated_at`,
   `export_disclosure_level`, `disclaimer`, redakt qilingan trace.
-- `build_research_csv(db, tenant, research) -> ResearchExport` — tadqiqot bo'yicha CSV: har
+- `build_research_csv(db, tenant, research, dialect="standard") -> ResearchExport` — tadqiqot bo'yicha CSV: har
   respondentga bitta qator, faqat joriy revision natijasi; litsenziya yaroqsiz bo'lsa butunlay rad;
   roziligi yaroqsizlar chiqarilib sanaladi; BOM + CRLF; matn ustunlari `csv_safe`, ballar son.
+  `CSV_DIALECTS`: `standard` — `,` va kasr `.` (SPSS, R, pandas); `excel` — `;` va kasr `,`
+  (ru/uz mintaqa sozlamali Excel; `.` bilan Excel `3.33`ni sanaga aylantiradi).
 - `build_csv_export(db, result, disclosure_level)` — meta qatorlar + scale jadvali
   (`uz-Latn` interpretatsiya, disclaimer har qatorda), CRLF.
 - `redact_trace(trace, disclosure_level)` — `summary_only`: item qadamlari olib tashlanadi;
@@ -574,7 +576,7 @@ Tenant endpointlari uchun headerlar: `Authorization: Bearer <token>` va
 | GET | `/responses/{id}/revisions` | member | |
 | GET | `/responses/{id}/revisions/{rid}` | member | |
 | GET | `/results?research_id=&participant_id=&response_revision_id=` | O, A, R, Au | sahifalangan |
-| GET | `/researches/{id}/export?format=csv` | O, A, R | `build_research_csv`; `X-Export-Rows`, `X-Export-Not-Calculated`, `X-Export-Excluded-Consent` |
+| GET | `/researches/{id}/export?format=csv&dialect=standard\|excel` | O, A, R | `build_research_csv`; `X-Export-Rows`, `X-Export-Not-Calculated`, `X-Export-Excluded-Consent` |
 | GET | `/results/{id}/export?format=json\|csv` | O, A, R | consent + licence qayta tekshiriladi; `xlsx/pdf` → 415 |
 | PUT / GET / DELETE | `/researches/{id}/participants/{pid}/pii` | `pii_access` | AES-GCM, audit |
 
@@ -709,7 +711,7 @@ Dev server: Vite `:5173`, `/api` va `/health` → `http://127.0.0.1:8000` proxy.
 | `tests/test_migrations.py` (3) | toza `upgrade head`, 0001→head, immutability trigger'lari |
 | `tests/test_research_close.py` (4) | yopish, hisoblanmagan javoblar soni va tasdiq, yopilgandan keyingi bloklar, rol |
 | PostgreSQL | `PSYCHOGRAM_TEST_DATABASE_URL` berilsa API testlari shu bazada ishlaydi (74 passed, PostgreSQL 18) |
-| `tests/test_research_export.py` (6) | qator tarkibi va hisobotlar, eskirgan natija chiqmasligi, formula himoyasi, 105 respondent, litsenziya, rol va tenant |
+| `tests/test_research_export.py` (7) | qator tarkibi va hisobotlar, eskirgan natija chiqmasligi, formula himoyasi, Excel dialekti, 105 respondent, litsenziya, rol va tenant |
 | `frontend/src/**/*.test.ts(x)` (55) | api client, capability siyosati, UI, Drawer, ErrorBoundary, pilot menyusi va flag'lar, tadqiqotni yaratish va boshlash, sessiya tugashi, javob formasi (rozilik, qoralama, savol yonidagi xatolar, dublikatsiz qayta urinish, tuzatish sababi), javoblar ro'yxati, tadqiqotni yakunlash, CSV yuklash, eskirgan natija belgisi, flows, import safety |
 
 Ishga tushirish: `pytest -q`; frontend — `npm run typecheck && npm run lint && npm run test && npm run build`.

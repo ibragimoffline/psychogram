@@ -602,9 +602,10 @@ def export_research(
     actor: Annotated[User, Depends(current_user)],
     db: Annotated[Session, Depends(get_db)],
     format: str = Query("csv", pattern="^csv$"),
+    dialect: str = Query("standard", pattern="^(standard|excel)$"),
 ):
     research = _research(db, context, research_id)
-    export = build_research_csv(db, context.organization, research)
+    export = build_research_csv(db, context.organization, research, dialect)
     summary = {
         "rows": export.rows,
         "not_calculated": export.not_calculated,
@@ -618,7 +619,7 @@ def export_research(
         action="research.export",
         object_type="research",
         object_id=research.id,
-        safe_metadata={"format": format, **summary},
+        safe_metadata={"format": format, "dialect": dialect, **summary},
     )
     db.commit()
     return PlainTextResponse(
@@ -626,7 +627,8 @@ def export_research(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": (
-                f'attachment; filename="psychogram-research-{research.id}.csv"'
+                f'attachment; filename="psychogram-research-{research.id}'
+                f'{"-excel" if dialect == "excel" else ""}.csv"'
             ),
             "X-Export-Rows": str(export.rows),
             "X-Export-Not-Calculated": str(export.not_calculated),

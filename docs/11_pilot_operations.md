@@ -95,6 +95,9 @@ PostgreSQL xizmatiga tegilmagan.
 | `scripts/compare_databases.py` manba ↔ tiklangan | 34/34 jadval mos (soni va checksum) |
 | Solishtirishning sezgirligi: tiklangan bazada bitta qator o'zgartirildi | `DIFF organizations` |
 | `0003` trigger'lari: upgrade → downgrade -1 → upgrade, `alembic check` | O'tdi, farq yo'q |
+| Excel 16, Windows `ru-RU` (ajratgich `;`, kasr `,`): `dialect=standard` CSV | Bitta ustunga tushdi |
+| Xuddi shu Excel: `;` + kasr nuqta (sinov varianti) | Ustunlar to'g'ri, lekin `3.33` **sanaga aylandi** ("мар.33") |
+| Xuddi shu Excel: API'ning `dialect=excel` CSV'i | 10 ustun; `3,33`, `5`, `10` son; "O‘G‘ILOY-01" buzilmagan; `=SUM(1)` matn bo'lib qoldi |
 | Trigger'lar bilan `pilot_smoke.py --with-pii` (app rol) | 16/16 PASS |
 | `UPDATE` tasdiqlangan revision / nashr qilingan versiya (app rol va owner) | Rad etildi: "… is immutable" |
 | `UPDATE` validatsiyadan o'tmagan revision (app rol) | Ruxsat berildi (ORM qoidasi bilan bir xil) |
@@ -173,7 +176,7 @@ natija sana bilan shu hujjatga yoki operatsion jurnalga yoziladi.
 | 7 | Tuzatishda eski natija saqlanadi, "Qayta hisoblash kerak", eksport eskisini bermaydi | `test_response_list_reports…`, `test_result_marks…`, `test_corrected_answers_are_not_exported…` | — |
 | 8 | Boshqa tashkilot kira olmaydi | `test_rbac_and_cross_tenant_denial`, `test_export_respects_roles_and_tenant` | — |
 | 9 | Rozilik/litsenziya bekor qilinsa bloklanadi | `test_withdrawn_consent_blocks_cached…`, `test_revoked_licence_blocks_cached…`, `test_export_is_refused_when_the_licence_is_revoked` | — |
-| 10 | CSV ekranga mos, sahifalashdan katta to'plamda qator yo'qolmaydi | `test_export_has_one_row…`, `test_export_includes_every_respondent_beyond_page_size` (105) | **Excel'da ochish** (o'zbek/rus locale'da vergul ajratgich) |
+| 10 | CSV ekranga mos, sahifalashdan katta to'plamda qator yo'qolmaydi | `test_export_has_one_row…`, `test_export_includes_every_respondent_beyond_page_size` (105), `test_excel_dialect_uses_semicolons_and_decimal_commas`; `ru-RU` Excel'da ochildi (5-bo'lim) | Pilot foydalanuvchilarining Excel'ida bir marta ochib ko'rish |
 | 11 | Yopilgan tadqiqot: kiritish yo'q, natija va eksport bor | `test_closed_research_blocks_changes_but_keeps_results_readable`, frontend yakunlash testlari | — |
 | 12 | Qayta ishga tushirish va backup'dan tiklash | 5-bo'lim (lokal mashq) | **Haqiqiy serverda mashq** |
 
@@ -185,6 +188,7 @@ yakunlaydi. Har bir qadamda kuzatilgan muammo va vaqt yoziladi.
 
 - B: haqiqiy metodika paketi va etalon misollar.
 - Haqiqiy server, proxy konfiguratsiyasi va TLS'ni sinash; tiklash mashqini shu muhitda takrorlash.
-- Excel'da CSV ko'rinishi; kerak bo'lsa nuqta-vergulli variant.
+- Ingliz (en-US) mintaqa sozlamali Excel uchun `dialect=excel` mos emas (u `,` kutadi); bunday
+  foydalanuvchilar `CSV (SPSS, R)` faylini Excel'ning "Data → From Text/CSV" orqali ochadi.
 - Retention bo'yicha mas'ul va o'chirish jarayoni.
 - MFA yoki step-up authentication (README'dagi release gate) — IdP/proxy darajasida.

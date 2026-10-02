@@ -42,14 +42,16 @@ describe('research lifecycle',()=>{
 
  it('downloads the research CSV and reports what it contained',async()=>{
   Object.defineProperty(URL,'createObjectURL',{value:vi.fn(()=>'blob:url'),configurable:true});Object.defineProperty(URL,'revokeObjectURL',{value:vi.fn(),configurable:true});vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>undefined)
-  open('/researches/r1',(path)=>{if(path.includes('/researches/r1/export?format=csv'))return Promise.resolve(new Response('participant_code\r\nP001\r\n',{status:200,headers:{'Content-Type':'text/csv','X-Export-Rows':'3','X-Export-Not-Calculated':'1','X-Export-Excluded-Consent':'0'}}));if(path.endsWith('/researches'))return json([research('closed')]);return undefined})
-  await userEvent.click(await screen.findByRole('button',{name:'CSV yuklash'}))
+  const calls=open('/researches/r1',(path)=>{if(path.includes('/researches/r1/export?format=csv'))return Promise.resolve(new Response('participant_code\r\nP001\r\n',{status:200,headers:{'Content-Type':'text/csv','X-Export-Rows':'3','X-Export-Not-Calculated':'1','X-Export-Excluded-Consent':'0'}}));if(path.endsWith('/researches'))return json([research('closed')]);return undefined})
+  await userEvent.click(await screen.findByRole('button',{name:'Excel uchun CSV'}))
   expect(await screen.findByText('CSV yuklandi: 3 ta respondent. Hali hisoblanmagan: 1. Rozilik sabab chiqarilmagan: 0.')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button',{name:'CSV (SPSS, R)'}))
+  await waitFor(()=>expect(calls.filter(c=>c.path.includes('/export?')).map(c=>c.path.split('?')[1])).toEqual(['format=csv&dialect=excel','format=csv&dialect=standard']))
  })
 
  it('hides close and research export from auditors',async()=>{
   open('/researches/r1',(path)=>path.endsWith('/researches')?json([research('active')]):undefined,'auditor')
-  await screen.findByRole('heading',{name:'Pilot'});expect(screen.queryByRole('button',{name:'Tadqiqotni yakunlash'})).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'CSV yuklash'})).not.toBeInTheDocument()
+  await screen.findByRole('heading',{name:'Pilot'});expect(screen.queryByRole('button',{name:'Tadqiqotni yakunlash'})).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'Excel uchun CSV'})).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'CSV (SPSS, R)'})).not.toBeInTheDocument()
  })
 })
 

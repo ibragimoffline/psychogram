@@ -98,14 +98,21 @@ class ResearchExport:
     excluded_consent: int
 
 
+# "excel" matches Excel with ru/uz regional settings (list separator ';', decimal ','):
+# with ',' it opens as one column, and with '.' decimals Excel turns 3.33 into a date.
+# "standard" is plain RFC 4180 with '.' decimals for SPSS, R and pandas.
+CSV_DIALECTS = {"standard": (",", "."), "excel": (";", ",")}
+
+
 def build_research_csv(
-    db: Session, tenant: Organization, research: Research
+    db: Session, tenant: Organization, research: Research, dialect: str = "standard"
 ) -> ResearchExport:
     """One row per respondent with the result of their current answers.
 
     The whole file is refused when the licence does not allow use; rows whose
     participant no longer has valid consent are left out and counted.
     """
+    delimiter, decimal_mark = CSV_DIALECTS[dialect]
     version = db.get(MethodologyVersion, research.methodology_version_id)
     methodology = db.get(Methodology, version.methodology_id) if version else None
     assert version is not None and methodology is not None
@@ -131,7 +138,7 @@ def build_research_csv(
 
     output = io.StringIO(newline="")
     output.write("\ufeff")  # lets Excel detect UTF-8
-    writer = csv.writer(output, lineterminator="\r\n")
+    writer = csv.writer(output, delimiter=delimiter, lineterminator="\r\n")
     writer.writerow(
         [
             "participant_code",
@@ -180,7 +187,10 @@ def build_research_csv(
         for _, scale_code, field in columns:
             value = getattr(scales[scale_code], field) if scale_code in scales else None
             # Scores are canonical decimals from the engine and stay numeric for analysis.
-            values.append(value or "" if field == "score_display" else csv_safe(value))
+            if field == "score_display":
+                values.append((value or "").replace(".", decimal_mark))
+            else:
+                values.append(csv_safe(value))
         writer.writerow(
             [
                 csv_safe(participant.external_code),

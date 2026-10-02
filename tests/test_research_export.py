@@ -107,7 +107,13 @@ def test_export_has_one_row_per_current_result_and_reports_the_rest(prepared):
         .json()
     )
     assert [e["safe_metadata"] for e in events if e["action"] == "research.export"] == [
-        {"format": "csv", "rows": 1, "not_calculated": 1, "excluded_consent": 1}
+        {
+            "format": "csv",
+            "dialect": "standard",
+            "rows": 1,
+            "not_calculated": 1,
+            "excluded_consent": 1,
+        }
     ]
 
 
@@ -205,3 +211,26 @@ def test_export_respects_roles_and_tenant(prepared):
         "memberships"
     ][0]["organization_id"]
     assert export(prepared, token=other, organization_id=other_org).status_code == 404
+
+
+def test_excel_dialect_uses_semicolons_and_decimal_commas(prepared):
+    response = respondent(prepared, "=HYPERLINK(1)")
+    calculate(prepared, response["current_revision_id"], "excel-dialect")
+    reply = prepared["client"].get(
+        f"/api/v1/researches/{prepared['research']['id']}/export?format=csv&dialect=excel",
+        headers=bearer(prepared["owner_token"], prepared["organization_id"]),
+    )
+    assert reply.status_code == 200, reply.text
+    assert "-excel.csv" in reply.headers["content-disposition"]
+    assert reply.text.startswith("﻿")
+    table = list(csv.reader(io.StringIO(reply.text.lstrip("﻿")), delimiter=";"))
+    assert table[0] == HEADER
+    assert table[1][0] == "'=HYPERLINK(1)"
+    assert table[1][6] == "5,00"
+    assert table[1][5].startswith("20")  # timestamps keep their ISO form
+
+    invalid = prepared["client"].get(
+        f"/api/v1/researches/{prepared['research']['id']}/export?format=csv&dialect=tsv",
+        headers=bearer(prepared["owner_token"], prepared["organization_id"]),
+    )
+    assert invalid.status_code == 422
