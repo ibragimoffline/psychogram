@@ -19,7 +19,7 @@ export function Button({variant='primary',icon,children,...props}:ButtonHTMLAttr
 }
 
 export function Status({value}:{value:string|null|undefined}){const normalized=(value??'unknown').toLowerCase();return <span className={`status status-${normalized.replaceAll('_','-')}`}><span className="status-dot"/>{human(normalized)}</span>}
-export const human=(value:string)=>({active:'Faol',ready:'Boshlashga tayyor',draft:'Qoralama',validated:'Tekshirilgan',validation_failed:'Xatoli',complete:'Tayyor',completed:'Tayyor',granted:'Rozilik berilgan',declined:'Rad etilgan',withdrawn:'Qaytarib olingan',verified:'Tasdiqlangan',published:'Nashr qilingan',pseudonymous:'Pseudonim',anonymous:'Anonim',identified:'Identifikatsiyalangan'}[value]??value.replaceAll('_',' '))
+export const human=(value:string)=>({active:'Faol',ready:'Boshlashga tayyor',not_calculated:'Hisoblanmagan',calculated:'Hisoblangan',recalculation_required:'Qayta hisoblash kerak',scored:'Hisoblangan',draft:'Qoralama',validated:'Tekshirilgan',validation_failed:'Xatoli',complete:'Tayyor',completed:'Tayyor',granted:'Rozilik berilgan',declined:'Rad etilgan',withdrawn:'Qaytarib olingan',verified:'Tasdiqlangan',published:'Nashr qilingan',pseudonymous:'Pseudonim',anonymous:'Anonim',identified:'Identifikatsiyalangan'}[value]??value.replaceAll('_',' '))
 
 export function Notice({tone='info',title,children}:{tone?:'info'|'warning'|'danger'|'success'|'privacy';title:string;children?:ReactNode}){
   return <div className={`notice ${tone}`}><RemoteIcon name={tone==='danger'?'circle-x':tone==='warning'?'triangle-alert':tone==='success'?'circle-check':tone==='privacy'?'shield':'info'} size={20}/><div><strong>{title}</strong>{children&&<div>{children}</div>}</div></div>
