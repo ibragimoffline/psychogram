@@ -23,12 +23,14 @@ export async function api<T>(path:string, options:ApiOptions = {}):Promise<T>{
   return await response.json() as T
 }
 
-export async function download(path:string,token:string,organizationId:string,filename:string){
+// Returns the response headers so callers can report what an export contained.
+export async function download(path:string,token:string,organizationId:string,filename:string):Promise<Headers>{
   let response:Response
   try{response=await fetch(`${API_ORIGIN}${path}`,{headers:{Authorization:`Bearer ${token}`,'X-Organization-ID':organizationId},referrerPolicy:'no-referrer'})}
   catch{throw new ApiError(0,'NETWORK_UNAVAILABLE','Server bilan aloqa yo‘q. Eksport yaratilmadi.')}
   if(!response.ok) throw await responseError(response,'Eksportni tayyorlab bo‘lmadi.')
   const url=URL.createObjectURL(await response.blob()); const anchor=document.createElement('a'); anchor.href=url;anchor.download=filename;anchor.click();URL.revokeObjectURL(url)
+  return response.headers
 }
 
 async function responseError(response:Response,fallback:string):Promise<ApiError>{

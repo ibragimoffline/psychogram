@@ -1,17 +1,17 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 import { Button, Empty, ErrorNotice, ErrorSummary, Loading, Notice, Page, Pagination, Status } from '../components/UI'
 import { useApi, useAuth } from '../context/AuthContext'
 import { safeMessage } from '../lib/api'
 import { can } from '../lib/capabilities'
 import { tenantKey } from '../lib/queryKeys'
-import type { Page as DataPage, ResponseDetail, ResponseItem } from '../types'
+import type { Page as DataPage, Research, ResponseDetail, ResponseItem } from '../types'
 
 const LIMIT=20
 export function ResponsesPage(){
  const {researchId=''}=useParams();const call=useApi();const {membership}=useAuth();const [offset,setOffset]=useState(0);const key=tenantKey(membership?.organization_id,'responses',researchId,offset,LIMIT);const responses=useQuery({queryKey:key,queryFn:()=>call<DataPage<ResponseItem>>(`/api/v1/researches/${researchId}/responses?limit=${LIMIT}&offset=${offset}`)})
- const writable=can(membership?.role,'response:write')
+ const {research}=useOutletContext<{research?:Research}>()??{};const writable=can(membership?.role,'response:write')&&research?.status==='active'
  return <section className="route-section"><header className="section-header"><div><p className="eyebrow">Respondentlar</p><h2>Javoblar</h2></div>{writable&&<Link className="button primary" to="new">Javob kiritish</Link>}</header>{responses.isLoading?<Loading/>:responses.error?<ErrorNotice error={responses.error}/>:!responses.data?.items.length?<Empty title="Javob hali yo‘q" icon="list-pen" action={writable?<Link className="button primary" to="new">Birinchi javobni kiriting</Link>:undefined}>Respondent kodi, rozilik qaydi va javoblar bitta formada kiritiladi.</Empty>:<><div className="data-table-wrap"><table><thead><tr><th scope="col">Respondent</th><th scope="col">Javob</th><th scope="col">Natija</th><th scope="col">Sana</th><th scope="col">Amal</th></tr></thead><tbody>{responses.data.items.map(r=><tr key={r.id}><td data-label="Respondent"><strong>{r.participant_external_code}</strong></td><td data-label="Javob"><Status value={r.current_revision_status??r.status}/></td><td data-label="Natija"><Status value={r.result_status}/></td><td data-label="Sana">{new Date(r.created_at).toLocaleString('uz-Latn')}</td><td data-label="Amal"><Link to={writable?r.id:`/responses/${r.id}`}>Ochish →</Link>{r.current_result_id&&<> · <Link to={`/results/${r.current_result_id}`}>Natija</Link></>}</td></tr>)}</tbody></table></div><Pagination offset={responses.data.offset} limit={responses.data.limit} total={responses.data.total} onChange={setOffset}/></>}</section>
 }
 

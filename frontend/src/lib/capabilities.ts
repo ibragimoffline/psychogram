@@ -3,6 +3,7 @@ import type { Membership, Role } from '../types'
 export type Capability =
   | 'research:create'
   | 'research:activate'
+  | 'research:close'
   | 'participant:write'
   | 'response:write'
   | 'result:calculate'
@@ -15,6 +16,7 @@ export type Capability =
 const policy: Record<Capability, readonly Role[]> = {
   'research:create': ['owner', 'admin', 'researcher'],
   'research:activate': ['owner', 'admin', 'researcher'],
+  'research:close': ['owner', 'admin', 'researcher'],
   'participant:write': ['owner', 'admin', 'researcher', 'operator'],
   'response:write': ['owner', 'admin', 'researcher', 'operator'],
   'result:calculate': ['owner', 'admin', 'researcher'],
