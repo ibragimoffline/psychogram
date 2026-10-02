@@ -94,7 +94,7 @@ psychogram/
 │       └── pii.py               # AES-GCM PII saqlash
 ├── alembic/versions/            # 0001_initial, 0002_pii_aes_gcm_envelope
 ├── config/settings.py           # Eski import yo'li uchun re-export
-├── tests/                       # pytest (47 funksiya, 56 holat)
+├── tests/                       # pytest (48 funksiya, 57 holat)
 ├── frontend/                    # React SPA
 └── docs/                        # 01..07 mahsulot, metodika, UX, QA hujjatlari
 ```
@@ -332,7 +332,8 @@ Audit `action` qiymatlari: `auth.bootstrap`, `auth.login`, `organization.registe
 | `create_response(db, research, payload, actor_id)` | Aktiv research + participant + consent; 1-revision; `finalize=true` bo'lsa darhol validatsiya | `RESPONSE_ATTEMPT_EXISTS`, `PARTICIPANT_NOT_FOUND` |
 | `revise_response(db, response, payload, actor_id)` | `expected_lock_version` mos bo'lsa yangi revision, `lock_version+1` | `REVISION_CONFLICT` 409 |
 | `_new_revision(...)` | Revision raqami, normalizatsiya, hash; `current_revision_id` yangilanadi | |
-| `validate_revision(db, response, revision, actor_id)` | Faqat joriy revision; consent; `validate_answers`; issue'larni saqlaydi; status `validated` yoki `validation_failed` | `REVISION_NOT_CURRENT`, `CONSENT_NOT_VALID` |
+| `validate_revision(db, response, revision, actor_id)` | Faqat joriy revision; allaqachon `validated`/`validation_failed` bo'lsa o'zgarishsiz qaytaradi; consent; `validate_answers`; issue'larni saqlaydi; status `validated` yoki `validation_failed` | `REVISION_NOT_CURRENT`, `CONSENT_NOT_VALID` |
+| `validation_issues(db, revision_id)` | Revisionning saqlangan xatolari (`item_code`, `error_code` bo'yicha tartiblangan) | |
 
 ### 6.3. `services/registry.py` — metodika registri
 
@@ -487,14 +488,14 @@ operator/auditor), `MemberView`, `MethodologyCreate`, `MethodologyView`,
 `LicenceCreate`, `LicenceView`, `PublishRequest`, `RetentionPolicyCreate` (1..36500 kun),
 `ResearchCreate`, `ResearchView`, `ParticipantCreate`, `ParticipantView`, `ConsentCreate`,
 `ConsentView`, `ResponseCreate`, `RevisionCreate` (`correction_reason`,
-`expected_lock_version`), `RevisionView`, `ResponseView`, `CalculationRequest`
+`expected_lock_version`), `ValidationIssueView`, `RevisionView` (+ `validation_issues`), `ResponseView`, `CalculationRequest`
 (`response_revision_id`, `idempotency_key`), `ScaleResultView`, `ResultView`,
 `CSVPreviewRequest`, `ImportPreviewView`, `ImportConfirmRequest`, `ImportConfirmView`.
 
 **`schemas/read.py` (read-model):** `RetentionPolicyView`, `LicenceDetailView`,
 `MethodologyVersionDetailView`, `MethodologyDetailView`, `ParticipantListItem`,
 `ParticipantPage`, `ParticipantDetailView`, `ConsentHistoryItem`, `ConsentHistoryView`,
-`RevisionDetailView`, `ResponseListItem`, `ResponsePage`, `ResponseDetailView`,
+`RevisionDetailView` (+ `validation_issues`), `ResponseListItem`, `ResponsePage`, `ResponseDetailView`,
 `RevisionHistoryView`, `ResultSummaryView`, `ResultPage`, `PIIWrite`, `PIIView`.
 Sahifalash: `offset ≥ 0`, `limit` 1..100 (default 50).
 
@@ -657,7 +658,7 @@ Dev server: Vite `:5173`, `/api` va `/health` → `http://127.0.0.1:8000` proxy.
 
 | Fayl | Qamrov |
 |---|---|
-| `tests/test_api.py` (15) | bootstrap, generic login, scoring + disclaimer + idempotency, RBAC va cross-tenant, consent/pin gate'lar, revision immutability, revoked licence, cache/natija o'qishda consent va licence gate'i, takroriy participant/retention kodi 409, summary_only redaksiya, CSV + PII |
+| `tests/test_api.py` (16) | bootstrap, generic login, scoring + disclaimer + idempotency, RBAC va cross-tenant, consent/pin gate'lar, revision immutability, revoked licence, cache/natija o'qishda consent va licence gate'i, takroriy participant/retention kodi 409, har bir savol bo'yicha validatsiya xatolari, summary_only redaksiya, CSV + PII |
 | `tests/test_scoring.py` (11) | kontrakt vektorlari, insufficient data, validatsiya kodlari, norm chegaralari, half-up, AST xavfsizligi va limitlari, division by zero, norm overlap |
 | `tests/test_security_release.py` (5) | bootstrap gate, export RBAC, security headerlar, CSV encoding/hajm, version detail kontekst |
 | `tests/test_ux_backend_gaps.py` (9) | read-model'lar, pagination, JSON/CSV export, formula-safe CSV, PII AES-GCM, fail-closed, legal hold |

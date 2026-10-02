@@ -4,7 +4,8 @@ Sana: 2026-10-02. Asos: [08_mvp_pilot_scope.md](08_mvp_pilot_scope.md), 9-bo'lim
 Tekshiruv paytida kodga o'zgarish kiritilmagan.
 
 **Holat (2026-10-02, branch `fix/stage-a-gates`):** F-01, F-02 — `ad77bcb`; F-03, F-04 — `d74f81a`;
-F-07 — `9861703`; F-15 — repository GitHub'ga ulandi (`712826f`). Qolganlari ochiq.
+F-05 — `8490da5`; F-07 — `9861703`; F-08 — `8ccd3b2`; F-15 — repository GitHub'ga ulandi (`712826f`).
+Qolganlari ochiq.
 
 ## 1. Muhit
 
