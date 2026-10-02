@@ -591,6 +591,50 @@ def test_result_marks_whether_it_belongs_to_the_current_answers(prepared):
     }
 
 
+def test_research_list_counts_respondents_and_current_results(prepared):
+    client = prepared["client"]
+    headers = bearer(prepared["owner_token"], prepared["organization_id"])
+    revised = create_response(prepared)
+    calculate(prepared, revised["current_revision_id"], "list-count-revised")
+    client.post(
+        f"/api/v1/responses/{revised['id']}/revisions",
+        headers=headers,
+        json={
+            "answers": {"q1": 3, "q2": 0, "q3": 1, "q4": 0},
+            "correction_reason": "Kiritishdagi xato",
+            "expected_lock_version": revised["lock_version"],
+            "finalize": True,
+        },
+    )
+    for code in ("P-002", "P-003"):
+        participant = client.post(
+            f"/api/v1/researches/{prepared['research']['id']}/participants",
+            headers=headers,
+            json={"external_code": code},
+        ).json()
+        if code == "P-002":
+            withdraw = {**prepared, "participant": participant}
+            client.post(
+                f"/api/v1/participants/{participant['id']}/consents",
+                headers=headers,
+                json={
+                    "status": "granted",
+                    "reference": "CONSENT-TEST",
+                    "version": "1",
+                    "obtained_at": datetime.now(UTC).isoformat(),
+                },
+            )
+            scored = create_response(withdraw)
+            calculate(prepared, scored["current_revision_id"], "list-count-scored")
+
+    listed = client.get("/api/v1/researches", headers=headers).json()
+    assert len(listed) == 1
+    assert listed[0]["methodology_name"] == "Synthetic Balance Demo"
+    assert listed[0]["version_code"] == "1.0.0"
+    assert listed[0]["respondent_count"] == 3
+    assert listed[0]["calculated_count"] == 1
+
+
 def test_research_view_exposes_consent_reference(prepared):
     researches = (
         prepared["client"]

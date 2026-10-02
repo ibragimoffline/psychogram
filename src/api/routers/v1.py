@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import (
@@ -55,6 +55,7 @@ from src.schemas.api import (
     PublishRequest,
     RegisterRequest,
     ResearchCreate,
+    ResearchListItem,
     ResearchView,
     ResponseCreate,
     ResponseView,
@@ -306,16 +307,48 @@ def research_create(
     return research
 
 
-@router.get("/researches", response_model=list[ResearchView], tags=["research"])
+@router.get("/researches", response_model=list[ResearchListItem], tags=["research"])
 def researches(
     context: Annotated[TenantContext, Depends(tenant_context)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return db.scalars(
-        select(Research)
-        .where(Research.tenant_id == context.organization.id)
+    tenant_id = context.organization.id
+    rows = db.execute(
+        select(Research, Methodology.canonical_name, MethodologyVersion.version_code)
+        .join(
+            MethodologyVersion, MethodologyVersion.id == Research.methodology_version_id
+        )
+        .join(Methodology, Methodology.id == MethodologyVersion.methodology_id)
+        .where(Research.tenant_id == tenant_id)
         .order_by(Research.created_at)
     ).all()
+    respondents: dict[str, int] = {
+        research_id: count
+        for research_id, count in db.execute(
+            select(Participant.research_id, func.count(Participant.id))
+            .where(Participant.tenant_id == tenant_id)
+            .group_by(Participant.research_id)
+        ).all()
+    }
+    calculated: dict[str, int] = {
+        research_id: count
+        for research_id, count in db.execute(
+            select(Response.research_id, func.count(func.distinct(Response.id)))
+            .join(Result, Result.response_revision_id == Response.current_revision_id)
+            .where(Response.tenant_id == tenant_id, Result.tenant_id == tenant_id)
+            .group_by(Response.research_id)
+        ).all()
+    }
+    return [
+        ResearchListItem(
+            **ResearchView.model_validate(research).model_dump(),
+            methodology_name=methodology_name,
+            version_code=version_code,
+            respondent_count=respondents.get(research.id, 0),
+            calculated_count=calculated.get(research.id, 0),
+        )
+        for research, methodology_name, version_code in rows
+    ]
 
 
 @router.post(

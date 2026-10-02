@@ -1,7 +1,7 @@
 export type Role = 'owner' | 'admin' | 'researcher' | 'operator' | 'auditor'
 export interface Membership { organization_id: string; organization_name: string; role: Role; can_view_pii: boolean }
 export interface Me { id: string; email: string; full_name: string; is_platform_admin: boolean; memberships: Membership[] }
-export interface Research { id: string; tenant_id: string; name: string; purpose: string; status: string; methodology_version_id: string; pii_mode: string; consent_reference: string; consent_version: string }
+export interface Research { id: string; tenant_id: string; name: string; purpose: string; status: string; methodology_version_id: string; pii_mode: string; consent_reference: string; consent_version: string; methodology_name?: string; version_code?: string; respondent_count?: number; calculated_count?: number }
 export interface Retention { id: string; code: string; retention_days: number; active: boolean; created_at: string }
 export interface Licence { id: string; status: string; content_disclosure_level: string; allow_item_display: boolean; eligible: boolean; restrictions_i18n: Record<string,string> }
 export interface InstrumentItem { item_code: string; item_type: 'integer'|'decimal'|'boolean'|'single_choice'|string; required: boolean; value_constraints?: Record<string, unknown>; prompt_i18n?: Record<string,string>; options?: {option_code:string;label_i18n:Record<string,string>}[] }

@@ -65,3 +65,10 @@ describe('result currency',()=>{
   expect(await screen.findByText('Respondent P001')).toBeInTheDocument();expect(screen.queryByText('Bu natija joriy emas')).not.toBeInTheDocument()
  })
 })
+
+describe('research list',()=>{
+ it('shows methodology and how many respondents have a current result',async()=>{
+  open('/researches',(path)=>path.endsWith('/researches')?json([{...research('active'),methodology_name:'Demo metodika',version_code:'1.0.0',respondent_count:12,calculated_count:9}]):undefined)
+  const row=await screen.findByRole('link',{name:/Pilot/});expect(row).toHaveTextContent('Demo metodika · v1.0.0');expect(row).toHaveTextContent('9 / 12');expect(row).toHaveTextContent('Faol')
+ })
+})
