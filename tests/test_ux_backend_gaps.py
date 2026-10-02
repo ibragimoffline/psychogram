@@ -78,6 +78,9 @@ def test_b01_and_b02_catalog_read_models_and_disclosure(prepared):
         headers=bearer(prepared["owner_token"], prepared["organization_id"]),
     )
     assert [row["id"] for row in eligible.json()] == [prepared["version"]["id"]]
+    assert eligible.json()[0]["methodology_code"] == "synth_balance_demo"
+    assert eligible.json()[0]["methodology_name"] == "Synthetic Balance Demo"
+    assert tenant.json()["versions"][0]["methodology_name"] == "Synthetic Balance Demo"
     history = prepared["client"].get(
         f"/api/v1/methodology-versions/{prepared['version']['id']}/licences",
         headers=bearer(prepared["owner_token"], prepared["organization_id"]),

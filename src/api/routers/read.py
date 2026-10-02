@@ -159,7 +159,7 @@ def eligible_versions(
     for version in versions:
         licence = latest_licence(db, version.id)
         if _is_eligible(licence, context.organization, use_type):
-            visible.append(_version_detail(version, licence, False, True))
+            visible.append(_version_detail(db, version, licence, False, True))
     return visible
 
 
@@ -216,7 +216,7 @@ def methodology_version_detail(
         raise DomainError(
             "METHODOLOGY_VERSION_NOT_FOUND", "Methodology version was not found", 404
         )
-    return _version_detail(version, licence, user.is_platform_admin, eligible)
+    return _version_detail(db, version, licence, user.is_platform_admin, eligible)
 
 
 @router.get(
@@ -724,12 +724,13 @@ def _visible_versions(
         eligible = bool(tenant and _is_eligible(licence, tenant, "research"))
         if user.is_platform_admin or eligible:
             result.append(
-                _version_detail(version, licence, user.is_platform_admin, eligible)
+                _version_detail(db, version, licence, user.is_platform_admin, eligible)
             )
     return result
 
 
 def _version_detail(
+    db: Session,
     version: MethodologyVersion,
     licence: LicenceRevision | None,
     private: bool,
@@ -738,9 +739,13 @@ def _version_detail(
     snapshot = (
         version.snapshot if private else _redact_snapshot(version.snapshot, licence)
     )
+    methodology = db.get(Methodology, version.methodology_id)
+    assert methodology is not None
     return MethodologyVersionDetailView(
         id=version.id,
         methodology_id=version.methodology_id,
+        methodology_code=methodology.methodology_code,
+        methodology_name=methodology.canonical_name,
         version_code=version.version_code,
         lifecycle_status=version.lifecycle_status,
         schema_version=version.schema_version,

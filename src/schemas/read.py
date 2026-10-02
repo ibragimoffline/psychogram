@@ -42,6 +42,8 @@ class LicenceDetailView(APIModel):
 class MethodologyVersionDetailView(APIModel):
     id: str
     methodology_id: str
+    methodology_code: str
+    methodology_name: str
     version_code: str
     lifecycle_status: str
     schema_version: str
