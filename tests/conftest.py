@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import os
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
@@ -9,6 +10,11 @@ from fastapi.testclient import TestClient
 from src.core.config import Settings
 from src.core.db import Database
 from src.main import create_app
+from src.models.domain import Base
+
+# Point at a disposable PostgreSQL database to run the API suite against it; every
+# test starts from an empty schema there. The default stays an in-memory SQLite.
+TEST_DATABASE_URL = os.environ.get("PSYCHOGRAM_TEST_DATABASE_URL", "sqlite://")
 
 SYNTH_BALANCE_DEMO = {
     "methodology_code": "synth_balance_demo",
@@ -145,7 +151,7 @@ TEST_BOOTSTRAP_TOKEN = "test-bootstrap-token-that-is-long-enough"
 @pytest.fixture
 def client():
     settings = Settings(
-        database_url="sqlite://",
+        database_url=TEST_DATABASE_URL,
         auto_create_schema=True,
         jwt_secret="test-secret-that-is-longer-than-thirty-two-characters",
         bootstrap_enabled=True,
@@ -156,8 +162,10 @@ def client():
         cors_origins="http://testserver",
     )
     database = Database(settings)
+    Base.metadata.drop_all(database.engine)
     with TestClient(create_app(settings, database)) as value:
         yield value
+    database.engine.dispose()
 
 
 def bearer(token: str, organization_id: str | None = None) -> dict[str, str]:
