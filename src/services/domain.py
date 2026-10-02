@@ -86,7 +86,10 @@ def bootstrap_user(
     return user
 
 
-def register_owner(db: Session, payload: RegisterRequest) -> tuple[User, Organization]:
+def register_owner(
+    db: Session, payload: RegisterRequest, *, actor_id: str | None = None
+) -> tuple[User, Organization]:
+    """Create an organization with its owner; actor_id is set when an admin does it."""
     email = str(payload.email).lower()
     if db.scalar(select(User).where(User.email == email)):
         raise DomainError(
@@ -118,8 +121,8 @@ def register_owner(db: Session, payload: RegisterRequest) -> tuple[User, Organiz
     )
     audit(
         db,
-        actor_id=user.id,
-        action="organization.register",
+        actor_id=actor_id or user.id,
+        action="organization.create" if actor_id else "organization.register",
         object_type="organization",
         object_id=organization.id,
         tenant_id=organization.id,

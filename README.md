@@ -59,7 +59,7 @@ bo'sh DB uchun kamida 32 belgili tasodifiy tokenni secret managerga qo'yib,
 
 1. Bo'sh DBda faqat bir marta `POST /api/v1/auth/bootstrap` chaqiring. Requestdagi `bootstrap_token` configured token bilan constant-time tekshiriladi.
 2. Birinchi admin yaratilishi bilan `PSYCHOGRAM_BOOTSTRAP_ENABLED=false` qilib API processlarini qayta ishga tushiring. Enabled bootstrap’ni doimiy production konfiguratsiyasi sifatida qoldirmang.
-3. Tashkilot egasi `POST /api/v1/auth/register` orqali organization yaratadi.
+3. Platform administrator `POST /api/v1/organizations` orqali tashkilot va uning owner hisobini yaratadi (body `/auth/register` bilan bir xil). Ochiq `POST /api/v1/auth/register` default holatda o'chiq (`PSYCHOGRAM_REGISTRATION_ENABLED=false`) va `404 REGISTRATION_DISABLED` qaytaradi.
 4. `POST /api/v1/auth/login` access token qaytaradi; `GET /api/v1/auth/me` membership va organization IDlarni beradi.
 5. Tenant endpointlarida ikkita header majburiy:
 
@@ -73,7 +73,7 @@ Platform administrator methodology draft/version/licence yaratib versiyani publi
 ## Barqaror `/api/v1` endpointlari
 
 - Auth: `/auth/bootstrap`, `/auth/register`, `/auth/login`, `/auth/me`
-- Organization: `/organizations/current`, `/organizations/current/members`
+- Organization: `/organizations` (POST, platform admin), `/organizations/current`, `/organizations/current/members`
 - Registry: `/methodologies`, `/methodologies/{id}`, `/methodologies/{id}/versions`, `/methodology-versions/eligible`, `/methodology-versions/{id}`, `/methodology-versions/{id}/licences`, `/methodology-versions/{id}/licences/current`, `/methodology-versions/{id}/publish`. Version detail tenant callida validated `use_type=research|education|clinical` yoki pinned `research_id` berilishi mumkin; pinned context serverdagi research `use_type`ini authoritative ishlatadi.
 - Research: `/retention-policies`, `/researches`, `/researches/{id}/activate`
 - Collection: `/researches/{id}/participants`, `/researches/{id}/participants/{participant_id}`, `/researches/{id}/participants/{participant_id}/consents`, `/participants/{id}/consents`, `/researches/{id}/responses`, `/responses/{id}`, `/responses/{id}/revisions`, `/responses/{id}/revisions/{revision_id}`, `/responses/{id}/validate`

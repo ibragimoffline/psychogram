@@ -51,6 +51,7 @@ from src.schemas.api import (
     ParticipantCreate,
     ParticipantView,
     PublishRequest,
+    RegisterRequest,
     ResearchCreate,
     ResearchView,
     ResponseCreate,
@@ -68,6 +69,7 @@ from src.services.domain import (
     create_research,
     create_response,
     record_consent,
+    register_owner,
     revise_response,
     validate_revision,
     validation_issues,
@@ -93,6 +95,23 @@ router = APIRouter(prefix="/api/v1")
 )
 def current_organization(context: Annotated[TenantContext, Depends(tenant_context)]):
     return context.organization
+
+
+@router.post(
+    "/organizations",
+    response_model=OrganizationView,
+    status_code=201,
+    tags=["organizations"],
+)
+def organization_create(
+    payload: RegisterRequest,
+    actor: Annotated[User, Depends(platform_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    _owner, organization = register_owner(db, payload, actor_id=actor.id)
+    db.commit()
+    db.refresh(organization)
+    return organization
 
 
 @router.get(

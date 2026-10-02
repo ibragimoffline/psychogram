@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 60
     bootstrap_enabled: bool = False
+    registration_enabled: bool = False
     bootstrap_token: SecretStr | None = None
     pii_encryption_key: SecretStr | None = None
     pii_key_version: str = "v1"

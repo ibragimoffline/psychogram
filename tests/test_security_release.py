@@ -193,3 +193,74 @@ def test_version_detail_uses_validated_use_type_and_pinned_research(prepared) ->
         endpoint, params={"use_type": "unsupported"}, headers=headers
     )
     assert invalid.status_code == 422
+
+
+def test_registration_is_closed_and_admin_creates_organizations() -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url="sqlite://",
+        auto_create_schema=True,
+        jwt_secret="test-secret-that-is-longer-than-thirty-two-characters",
+        bootstrap_enabled=True,
+        bootstrap_token=TEST_BOOTSTRAP_TOKEN,
+        cors_origins="http://testserver",
+    )
+    organization = {
+        "email": "owner@pilot.example",
+        "full_name": "Pilot Owner",
+        "password": "A-very-safe-owner-password",
+        "organization_name": "Pilot Lab",
+        "organization_code": "pilot_lab",
+    }
+    with TestClient(create_app(settings, Database(settings))) as client:
+        closed = client.post("/api/v1/auth/register", json=organization)
+        assert closed.status_code == 404
+        assert closed.json()["error"]["code"] == "REGISTRATION_DISABLED"
+
+        admin_token = client.post(
+            "/api/v1/auth/bootstrap",
+            json={
+                "email": "admin@example.com",
+                "full_name": "Admin",
+                "password": "A-secure-bootstrap-password",
+                "bootstrap_token": TEST_BOOTSTRAP_TOKEN,
+            },
+        ).json()["access_token"]
+        admin_id = client.get("/api/v1/auth/me", headers=bearer(admin_token)).json()[
+            "id"
+        ]
+        created = client.post(
+            "/api/v1/organizations", headers=bearer(admin_token), json=organization
+        )
+        assert created.status_code == 201, created.text
+        assert created.json()["code"] == "pilot_lab"
+
+        owner_token = client.post(
+            "/api/v1/auth/login",
+            json={"email": organization["email"], "password": organization["password"]},
+        ).json()["access_token"]
+        membership = client.get("/api/v1/auth/me", headers=bearer(owner_token)).json()[
+            "memberships"
+        ][0]
+        assert membership["organization_id"] == created.json()["id"]
+        assert membership["role"] == "owner"
+
+        events = client.get(
+            "/api/v1/audit-events",
+            headers=bearer(owner_token, membership["organization_id"]),
+        ).json()
+        assert any(
+            event["action"] == "organization.create" and event["actor_id"] == admin_id
+            for event in events
+        )
+
+        denied = client.post(
+            "/api/v1/organizations",
+            headers=bearer(owner_token),
+            json={
+                **organization,
+                "email": "x@pilot.example",
+                "organization_code": "x_lab",
+            },
+        )
+        assert denied.status_code == 403

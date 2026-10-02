@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from src.api.dependencies import current_user, get_db, get_runtime_settings
 from src.core.config import Settings
+from src.core.errors import DomainError
 from src.core.security import create_access_token
 from src.models.domain import Membership, Organization, User
 from src.schemas.api import (
@@ -48,6 +49,12 @@ def register(
     db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_runtime_settings)],
 ):
+    if not settings.registration_enabled:
+        raise DomainError(
+            "REGISTRATION_DISABLED",
+            "Self-service registration is disabled; ask a platform administrator",
+            404,
+        )
     user, _organization = register_owner(db, payload)
     db.commit()
     return _token(user, settings)

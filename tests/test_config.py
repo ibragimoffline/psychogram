@@ -45,3 +45,8 @@ def test_production_accepts_explicit_bootstrap_gate_and_token() -> None:
         bootstrap_token=SecretStr("b" * 32),
     )
     assert settings.bootstrap_enabled is True
+
+
+def test_self_registration_is_disabled_by_default() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.registration_enabled is False
