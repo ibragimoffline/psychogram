@@ -286,6 +286,83 @@ def test_withdrawn_consent_and_invalid_revision_block_scoring(prepared):
     assert blocked.json()["error"]["code"] == "CONSENT_NOT_VALID"
 
 
+def withdraw_consent(env):
+    withdrawn = env["client"].post(
+        f"/api/v1/participants/{env['participant']['id']}/consents",
+        headers=bearer(env["owner_token"], env["organization_id"]),
+        json={
+            "status": "withdrawn",
+            "reference": "CONSENT-TEST",
+            "version": "1",
+            "obtained_at": datetime.now(UTC).isoformat(),
+        },
+    )
+    assert withdrawn.status_code == 201, withdrawn.text
+
+
+def revoke_licence(env):
+    licence = env["client"].post(
+        f"/api/v1/methodology-versions/{env['version']['id']}/licences",
+        headers=bearer(env["admin_token"]),
+        json={
+            "status": "revoked",
+            "copyright_status": "public_domain",
+            "rights_holder": "Synthetic",
+            "evidence_reference": "SYNTHETIC_TEST_ONLY",
+            "allowed_use_types": ["research"],
+            "allowed_org_types": ["research_center"],
+            "allowed_regions": ["GLOBAL"],
+            "content_disclosure_level": "summary_only",
+            "valid_from": str(date.today() - timedelta(days=1)),
+            "required_disclaimer_i18n": {"uz-Latn": "Bu natija tibbiy tashxis emas."},
+            "restrictions_i18n": {"uz-Latn": "Revoked"},
+            "change_reason": "Test revocation",
+        },
+    )
+    assert licence.status_code == 201, licence.text
+
+
+def test_withdrawn_consent_blocks_cached_calculation_and_result_read(prepared):
+    revision_id = create_response(prepared)["current_revision_id"]
+    first = calculate(prepared, revision_id, "cached-consent")
+    assert first.status_code == 200, first.text
+    result_url = f"/api/v1/results/{first.json()['id']}"
+    headers = bearer(prepared["owner_token"], prepared["organization_id"])
+    assert prepared["client"].get(result_url, headers=headers).status_code == 200
+
+    withdraw_consent(prepared)
+
+    replay = calculate(prepared, revision_id, "cached-consent")
+    assert replay.status_code == 409
+    assert replay.json()["error"]["code"] == "CONSENT_NOT_VALID"
+    other_key = calculate(prepared, revision_id, "cached-consent-new-key")
+    assert other_key.status_code == 409
+    assert other_key.json()["error"]["code"] == "CONSENT_NOT_VALID"
+    read = prepared["client"].get(result_url, headers=headers)
+    assert read.status_code == 409
+    assert read.json()["error"]["code"] == "CONSENT_NOT_VALID"
+    export = prepared["client"].get(f"{result_url}/export?format=csv", headers=headers)
+    assert export.status_code == 409
+    assert export.json()["error"]["code"] == "CONSENT_NOT_VALID"
+
+
+def test_revoked_licence_blocks_cached_calculation_and_result_read(prepared):
+    revision_id = create_response(prepared)["current_revision_id"]
+    first = calculate(prepared, revision_id, "cached-licence")
+    assert first.status_code == 200, first.text
+    result_url = f"/api/v1/results/{first.json()['id']}"
+    headers = bearer(prepared["owner_token"], prepared["organization_id"])
+
+    revoke_licence(prepared)
+
+    replay = calculate(prepared, revision_id, "cached-licence")
+    assert replay.status_code == 409
+    assert replay.json()["error"]["code"] == "LICENCE_NOT_VALID"
+    read = prepared["client"].get(result_url, headers=headers)
+    assert read.status_code == 409
+    assert read.json()["error"]["code"] == "LICENCE_NOT_VALID"
+
+
 def test_summary_only_licence_redacts_item_trace(prepared):
     licence = prepared["client"].post(
         f"/api/v1/methodology-versions/{prepared['version']['id']}/licences",

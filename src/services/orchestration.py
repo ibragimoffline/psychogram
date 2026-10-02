@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from src.core.errors import DomainError
 from src.models.domain import (
     CalculationRun,
+    ConsentRecord,
     ExplainabilityTrace,
     LicenceRevision,
     MethodologyVersion,
@@ -76,6 +77,15 @@ def calculate(
             "Pinned methodology hash does not match the published snapshot",
             409,
         )
+    # Current consent and licence policy applies to idempotent replays as well, so a
+    # withdrawn consent or revoked licence cannot be bypassed via a cached result.
+    consent, licence = require_result_policy(
+        db,
+        tenant=tenant,
+        research=research,
+        participant_id=response.participant_id,
+        methodology_version_id=version.id,
+    )
     computation_key = canonical_hash(
         {
             "tenant_id": tenant.id,
@@ -136,19 +146,10 @@ def calculate(
             "Scoring requires the validated current revision",
             409,
         )
-    consent = require_valid_consent(db, response.participant_id)
-    licence = latest_licence(db, version.id)
-    check_licence(
-        licence,
-        org_type=tenant.org_type,
-        region=tenant.region,
-        use_type=research.use_type,
-    )
     if version.lifecycle_status != "published":
         raise DomainError(
             "METHODOLOGY_NOT_PUBLISHED", "Only a published version can be scored", 409
         )
-    assert licence is not None
     disclosure = _effective_disclosure(licence)
     run = CalculationRun(
         tenant_id=tenant.id,
@@ -298,6 +299,27 @@ def calculate(
         safe_metadata={"result_hash": result.result_hash},
     )
     return result
+
+
+def require_result_policy(
+    db: Session,
+    *,
+    tenant: Organization,
+    research: Research,
+    participant_id: str,
+    methodology_version_id: str,
+) -> tuple[ConsentRecord, LicenceRevision]:
+    """Current consent and licence gate for scoring, reading and exporting results."""
+    consent = require_valid_consent(db, participant_id)
+    licence = latest_licence(db, methodology_version_id)
+    check_licence(
+        licence,
+        org_type=tenant.org_type,
+        region=tenant.region,
+        use_type=research.use_type,
+    )
+    assert licence is not None
+    return consent, licence
 
 
 def result_view(db: Session, result: Result) -> dict:

@@ -57,9 +57,8 @@ from src.schemas.read import (
     RevisionHistoryView,
 )
 from src.services.audit import audit
-from src.services.domain import require_valid_consent
 from src.services.exports import build_csv_export, build_json_export
-from src.services.orchestration import _effective_disclosure
+from src.services.orchestration import _effective_disclosure, require_result_policy
 from src.services.pii import delete_pii, upsert_pii, view_pii
 from src.services.registry import check_licence, latest_licence
 
@@ -537,15 +536,13 @@ def export_result(
     )
     if not research:
         raise DomainError("RESEARCH_NOT_FOUND", "Research was not found", 404)
-    require_valid_consent(db, result.participant_id)
-    licence = latest_licence(db, result.methodology_version_id)
-    check_licence(
-        licence,
-        org_type=context.organization.org_type,
-        region=context.organization.region,
-        use_type=research.use_type,
+    _consent, licence = require_result_policy(
+        db,
+        tenant=context.organization,
+        research=research,
+        participant_id=result.participant_id,
+        methodology_version_id=result.methodology_version_id,
     )
-    assert licence is not None
     disclosure = _effective_disclosure(licence)
     if format in {"xlsx", "pdf"}:
         audit(

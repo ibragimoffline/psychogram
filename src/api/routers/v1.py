@@ -71,7 +71,11 @@ from src.services.domain import (
     validate_revision,
 )
 from src.services.imports import confirm_import, preview_csv
-from src.services.orchestration import calculate, result_view
+from src.services.orchestration import (
+    calculate,
+    require_result_policy,
+    result_view,
+)
 from src.services.registry import (
     create_licence,
     create_methodology,
@@ -454,6 +458,13 @@ def get_result(
     )
     if not result:
         raise DomainError("RESULT_NOT_FOUND", "Result was not found", 404)
+    require_result_policy(
+        db,
+        tenant=context.organization,
+        research=_research(db, context, result.research_id),
+        participant_id=result.participant_id,
+        methodology_version_id=result.methodology_version_id,
+    )
     return result_view(db, result)
 
 
