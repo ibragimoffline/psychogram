@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     access_token_minutes: int = 60
     bootstrap_enabled: bool = False
     registration_enabled: bool = False
+    csv_import_enabled: bool = False
     bootstrap_token: SecretStr | None = None
     pii_encryption_key: SecretStr | None = None
     pii_key_version: str = "v1"

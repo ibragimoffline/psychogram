@@ -151,6 +151,7 @@ def client():
         bootstrap_enabled=True,
         bootstrap_token=TEST_BOOTSTRAP_TOKEN,
         registration_enabled=True,
+        csv_import_enabled=True,
         pii_encryption_key=base64.b64encode(b"k" * 32).decode("ascii"),
         cors_origins="http://testserver",
     )

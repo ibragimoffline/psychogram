@@ -264,3 +264,27 @@ def test_registration_is_closed_and_admin_creates_organizations() -> None:
             },
         )
         assert denied.status_code == 403
+
+
+def test_csv_import_is_disabled_by_default(prepared) -> None:
+    settings = Settings(_env_file=None)
+    assert settings.csv_import_enabled is False
+    client = prepared["client"]
+    client.app.state.settings = settings.model_copy(
+        update={"jwt_secret": client.app.state.settings.jwt_secret}
+    )
+    headers = bearer(prepared["owner_token"], prepared["organization_id"])
+    research_id = prepared["research"]["id"]
+    preview = client.post(
+        f"/api/v1/researches/{research_id}/imports/preview",
+        headers=headers,
+        json={"csv_text": "participant_external_code\nP-001\n"},
+    )
+    confirm = client.post(
+        f"/api/v1/researches/{research_id}/imports/any-id/confirm",
+        headers=headers,
+        json={"preview_hash": "sha256:x"},
+    )
+    for response in (preview, confirm):
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "CSV_IMPORT_DISABLED"

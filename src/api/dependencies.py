@@ -28,6 +28,15 @@ def get_runtime_settings(request: Request) -> Settings:
     return request.app.state.settings
 
 
+def require_csv_import(
+    settings: Annotated[Settings, Depends(get_runtime_settings)],
+) -> None:
+    if not settings.csv_import_enabled:
+        raise DomainError(
+            "CSV_IMPORT_DISABLED", "CSV import is disabled in this deployment", 404
+        )
+
+
 def current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
     db: Annotated[Session, Depends(get_db)],

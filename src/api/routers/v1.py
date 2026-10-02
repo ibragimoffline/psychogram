@@ -12,6 +12,7 @@ from src.api.dependencies import (
     get_db,
     get_runtime_settings,
     platform_admin,
+    require_csv_import,
     roles,
     tenant_context,
 )
@@ -503,6 +504,7 @@ def get_result(
     response_model=ImportPreviewView,
     status_code=201,
     tags=["imports"],
+    dependencies=[Depends(require_csv_import)],
 )
 def import_preview(
     research_id: str,
@@ -536,6 +538,7 @@ def import_preview(
     "/researches/{research_id}/imports/{import_id}/confirm",
     response_model=ImportConfirmView,
     tags=["imports"],
+    dependencies=[Depends(require_csv_import)],
 )
 def import_confirm(
     research_id: str,

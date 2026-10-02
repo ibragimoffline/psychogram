@@ -80,7 +80,7 @@ Platform administrator methodology draft/version/licence yaratib versiyani publi
 - PII: `PUT|GET|DELETE /researches/{id}/participants/{participant_id}/pii`
 - Scoring: `/researches/{id}/calculations`, `/results`, `/results/{id}`
 - Export: `/results/{id}/export?format=json|csv` (`xlsx` va `pdf` hozir `415 EXPORT_FORMAT_UNSUPPORTED` qaytaradi)
-- CSV: `/researches/{id}/imports/preview`, `/researches/{id}/imports/{import_id}/confirm`
+- CSV: `/researches/{id}/imports/preview`, `/researches/{id}/imports/{import_id}/confirm` — default o'chiq (`PSYCHOGRAM_CSV_IMPORT_ENABLED=false`, `404 CSV_IMPORT_DISABLED`); pilotning birinchi relizida import yo'q
 - Audit: `/audit-events`
 
 Xatolar barqaror shaklda qaytadi:
