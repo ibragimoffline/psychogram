@@ -35,6 +35,7 @@ from src.models.domain import (
 from src.schemas.api import (
     CSVPreviewRequest,
     CalculationRequest,
+    CloseResearchRequest,
     ConsentCreate,
     ConsentView,
     ImportConfirmRequest,
@@ -66,6 +67,7 @@ from src.schemas.api import (
 from src.services.domain import (
     activate_research,
     add_member,
+    close_research,
     create_participant,
     create_research,
     create_response,
@@ -327,6 +329,29 @@ def research_activate(
 ):
     research = _research(db, context, research_id)
     activate_research(db, context.organization, research, actor.id)
+    db.commit()
+    db.refresh(research)
+    return research
+
+
+@router.post(
+    "/researches/{research_id}/close", response_model=ResearchView, tags=["research"]
+)
+def research_close(
+    research_id: str,
+    payload: CloseResearchRequest,
+    context: Annotated[TenantContext, Depends(roles("owner", "admin", "researcher"))],
+    actor: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    research = _research(db, context, research_id)
+    close_research(
+        db,
+        context.organization,
+        research,
+        actor.id,
+        confirm_uncalculated=payload.confirm_uncalculated,
+    )
     db.commit()
     db.refresh(research)
     return research

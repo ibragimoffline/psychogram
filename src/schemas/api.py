@@ -183,6 +183,11 @@ class ResearchView(APIModel):
     consent_version: str
 
 
+class CloseResearchRequest(APIModel):
+    # Close even though some scorable responses have no result for their current answers.
+    confirm_uncalculated: bool = False
+
+
 class ParticipantCreate(APIModel):
     external_code: str = Field(min_length=1, max_length=120)
     pii: dict[str, str] | None = None

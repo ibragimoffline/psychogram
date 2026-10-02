@@ -22,6 +22,7 @@ from src.models.domain import (
     Response,
     ResponseRevision,
     ResponseValidationIssue,
+    Result,
     RetentionPolicy,
     Scale,
     User,
@@ -323,6 +324,80 @@ def activate_research(
     return research
 
 
+def close_research(
+    db: Session,
+    tenant: Organization,
+    research: Research,
+    actor_id: str,
+    *,
+    confirm_uncalculated: bool,
+) -> Research:
+    if research.tenant_id != tenant.id:
+        raise DomainError(
+            "TENANT_ACCESS_DENIED",
+            "Research does not belong to the active organization",
+            404,
+        )
+    if research.status == "closed":
+        return research
+    if research.status != "active":
+        raise DomainError(
+            "RESEARCH_STATE_INVALID", "Only active research can be closed", 409
+        )
+    uncalculated = count_uncalculated_responses(db, research)
+    if uncalculated and not confirm_uncalculated:
+        raise DomainError(
+            "RESEARCH_HAS_UNCALCULATED_RESPONSES",
+            "Some responses with valid consent have no result for their current answers",
+            409,
+            details={"uncalculated_responses": uncalculated},
+        )
+    research.status = "closed"
+    audit(
+        db,
+        actor_id=actor_id,
+        tenant_id=tenant.id,
+        research_id=research.id,
+        action="research.close",
+        object_type="research",
+        object_id=research.id,
+        safe_metadata={"uncalculated_responses": uncalculated},
+    )
+    return research
+
+
+def count_uncalculated_responses(db: Session, research: Research) -> int:
+    """Responses whose current revision has no result, among participants who can
+    still be scored (valid consent)."""
+    calculated = set(
+        db.scalars(
+            select(Result.response_revision_id).where(
+                Result.tenant_id == research.tenant_id,
+                Result.research_id == research.id,
+            )
+        ).all()
+    )
+    count = 0
+    for response in db.scalars(
+        select(Response).where(
+            Response.tenant_id == research.tenant_id,
+            Response.research_id == research.id,
+        )
+    ).all():
+        if response.current_revision_id in calculated:
+            continue
+        consent = latest_consent(db, response.participant_id)
+        if consent and consent.status in {"granted", "not_required_with_basis"}:
+            count += 1
+    return count
+
+
+def _require_active_research(db: Session, research_id: str) -> None:
+    research = db.get(Research, research_id)
+    if not research or research.status != "active":
+        raise DomainError("RESEARCH_NOT_ACTIVE", "Changes require active research", 409)
+
+
 def create_participant(
     db: Session, research: Research, payload: ParticipantCreate, actor_id: str
 ) -> Participant:
@@ -377,6 +452,9 @@ def record_consent(
         raise DomainError(
             "CONSENT_BASIS_REQUIRED", "A basis is required for not_required_with_basis"
         )
+    # Withdrawals and refusals stay possible after a research is closed; new grants do not.
+    if payload.status in {"granted", "not_required_with_basis"}:
+        _require_active_research(db, participant.research_id)
     latest_version = (
         db.scalar(
             select(func.max(ConsentRecord.record_version)).where(
@@ -496,6 +574,7 @@ def create_response(
 def revise_response(
     db: Session, response: Response, payload: RevisionCreate, actor_id: str
 ) -> ResponseRevision:
+    _require_active_research(db, response.research_id)
     if response.lock_version != payload.expected_lock_version:
         raise DomainError(
             "REVISION_CONFLICT", "Response was modified by another actor", 409
@@ -605,6 +684,7 @@ def validate_revision(
     # duplicate the stored issues.
     if revision.status in {"validated", "validation_failed"}:
         return revision
+    _require_active_research(db, response.research_id)
     require_valid_consent(db, response.participant_id)
     version = db.get(MethodologyVersion, response.methodology_version_id)
     issues = (

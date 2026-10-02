@@ -749,8 +749,8 @@ def enforce_immutable_records(session: Session, _flush_context, _instances) -> N
                 raise ValueError("Validated response revision is immutable")
         if isinstance(obj, ResearchMethodologyPin) and inspect(obj).persistent:
             research = session.get(Research, obj.research_id)
-            if research and research.status == "active":
-                raise ValueError("Active research methodology pin is immutable")
+            if research and research.status in {"active", "closed"}:
+                raise ValueError("Started research methodology pin is immutable")
     for obj in session.deleted:
         if isinstance(
             obj, immutable_always + (MethodologyVersion, ResponseRevision, AuditEvent)
@@ -761,5 +761,5 @@ def enforce_immutable_records(session: Session, _flush_context, _instances) -> N
             )
         if isinstance(obj, ResearchMethodologyPin):
             research = session.get(Research, obj.research_id)
-            if research and research.status == "active":
-                raise ValueError("Active research methodology pin cannot be deleted")
+            if research and research.status in {"active", "closed"}:
+                raise ValueError("Started research methodology pin cannot be deleted")
