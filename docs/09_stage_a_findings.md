@@ -1,7 +1,10 @@
 # A bosqichi: kod va hujjat solishtiruvi, lokal ishga tushirish
 
 Sana: 2026-10-02. Asos: [08_mvp_pilot_scope.md](08_mvp_pilot_scope.md), 9-bo'lim, A bosqichi.
-Kodga o'zgarish kiritilmagan; bu faqat tekshiruv natijasi.
+Tekshiruv paytida kodga o'zgarish kiritilmagan.
+
+**Holat (2026-10-02, branch `fix/stage-a-gates`):** F-01, F-02 — `ad77bcb`; F-03, F-04 — `d74f81a`;
+F-07 — `9861703`; F-15 — repository GitHub'ga ulandi (`712826f`). Qolganlari ochiq.
 
 ## 1. Muhit
 

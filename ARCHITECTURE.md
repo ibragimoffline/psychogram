@@ -94,7 +94,7 @@ psychogram/
 │       └── pii.py               # AES-GCM PII saqlash
 ├── alembic/versions/            # 0001_initial, 0002_pii_aes_gcm_envelope
 ├── config/settings.py           # Eski import yo'li uchun re-export
-├── tests/                       # pytest (43 funksiya, 52 holat)
+├── tests/                       # pytest (47 funksiya, 56 holat)
 ├── frontend/                    # React SPA
 └── docs/                        # 01..07 mahsulot, metodika, UX, QA hujjatlari
 ```
@@ -325,7 +325,7 @@ Audit `action` qiymatlari: `auth.bootstrap`, `auth.login`, `organization.registe
 | `add_member(db, tenant_id, payload, actor_id)` | Mavjud yoki yangi userni tenantga qo'shadi | `MEMBERSHIP_EXISTS` 409 |
 | `create_research(db, tenant, payload, actor_id)` | Published version + tenant retention policy + licence tekshiruvi; status `ready`; norm tanlanmasa default normlar; `ResearchMethodologyPin` yaratadi | `METHODOLOGY_NOT_PUBLISHED`, `RETENTION_POLICY_NOT_FOUND`, `LICENCE_NOT_VALID`, `NORM_PIN_INVALID` |
 | `activate_research(db, tenant, research, actor_id)` | `ready → active` (idempotent), licence qayta tekshiriladi | `RESEARCH_STATE_INVALID`, `METHODOLOGY_NOT_PUBLISHED` |
-| `create_participant(db, research, payload, actor_id)` | Faqat aktiv research; inline `pii` rad etiladi | `RESEARCH_NOT_ACTIVE`, `PII_STORAGE_NOT_CONFIGURED` |
+| `create_participant(db, research, payload, actor_id)` | Faqat aktiv research; inline `pii` rad etiladi; kod research ichida unique | `RESEARCH_NOT_ACTIVE`, `PII_STORAGE_NOT_CONFIGURED`, `PARTICIPANT_CODE_EXISTS` 409 |
 | `record_consent(db, participant, payload, actor_id)` | Append-only consent, `record_version+1` | `CONSENT_BASIS_REQUIRED` |
 | `latest_consent(db, participant_id)` | Eng oxirgi consent yozuvi | |
 | `require_valid_consent(db, participant_id)` | `granted` yoki asosli `not_required_with_basis` | `CONSENT_NOT_VALID` 409 |
@@ -400,12 +400,14 @@ Versiyalar: `ENGINE_VERSION="psychogram-scoring/1"`, `INTERPRETER_VERSION="json-
 `calculate(db, *, tenant, research, revision_id, idempotency_key, actor_id) -> Result`:
 1. Tenant/research/revision/response scope tekshiruvi.
 2. Pin hash == version `content_hash` (`METHODOLOGY_HASH_MISMATCH`).
-3. `computation_key = hash(tenant, research, revision, answer_hash, methodology_hash,
+3. `require_result_policy(...)` — joriy consent va licence. Idempotent qayta so'rovdan
+   **oldin** bajariladi, shuning uchun bekor qilingan rozilik/litsenziya cache orqali chetlanmaydi.
+4. `computation_key = hash(tenant, research, revision, answer_hash, methodology_hash,
    norm_selection, engine/interpreter/rounding versiyalari)`.
-4. **Idempotency**: shu `idempotency_key` boshqa computation uchun ishlatilgan bo'lsa
+5. **Idempotency**: shu `idempotency_key` boshqa computation uchun ishlatilgan bo'lsa
    `IDEMPOTENCY_KEY_REUSED`; mavjud natija bo'lsa uni qaytaradi; tugamagan bo'lsa
    `CALCULATION_IN_PROGRESS`. Xuddi shu `computation_key` bo'yicha ham dedup.
-5. Gate'lar: research `active`, revision joriy va `validated`, consent, licence, version published.
+   Gate'lar (yangi hisob uchun): research `active`, revision joriy va `validated`, version published.
 6. `_effective_disclosure(licence)` → `full` / `derived_only` / `summary_only`.
 7. `CalculationRun(status="running")` + audit `calculation.start`.
 8. `score_snapshot(...)`.
@@ -413,6 +415,10 @@ Versiyalar: `ENGINE_VERSION="psychogram-scoring/1"`, `INTERPRETER_VERSION="json-
    `CONSENT_CHANGED_DURING_RUN`, `LICENCE_CHANGED_DURING_RUN`.
 10. `Result` (`result_hash`), `ScaleResult`lar, `ExplainabilityTrace` (`trace_hash`),
     `TraceStep`lar; response `scored`, run `succeeded`; audit `calculation.succeed`.
+
+`require_result_policy(db, *, tenant, research, participant_id, methodology_version_id)
+-> (ConsentRecord, LicenceRevision)` — `require_valid_consent` + `check_licence`; `calculate`,
+`GET /results/{id}` va eksport umumiy ishlatadi.
 
 `result_view(db, result) -> dict` — natija + scale'lar + trace qadamlari (API/export uchun).
 
@@ -511,7 +517,7 @@ Tenant endpointlari uchun headerlar: `Authorization: Bearer <token>` va
 |---|---|---|---|
 | GET | `/organizations/current` | har qanday member | — |
 | GET / POST | `/organizations/current/members` | O, A | `add_member` |
-| POST | `/retention-policies` | O, A | to'g'ridan-to'g'ri ORM |
+| POST | `/retention-policies` | O, A | to'g'ridan-to'g'ri ORM; takroriy kod → `RETENTION_POLICY_CODE_EXISTS` 409 |
 | GET | `/methodologies` | token | — |
 | POST | `/methodologies` | PA | `create_methodology` |
 | POST | `/methodologies/{id}/versions` | PA | `create_version` |
@@ -526,7 +532,7 @@ Tenant endpointlari uchun headerlar: `Authorization: Bearer <token>` va
 | POST | `/responses/{id}/revisions` | O, A, R, Op | `revise_response` |
 | POST | `/responses/{id}/validate` | O, A, R, Op | `validate_revision` |
 | POST | `/researches/{id}/calculations` | O, A, R | `calculate` |
-| GET | `/results/{id}` | O, A, R, Au | `result_view` |
+| GET | `/results/{id}` | O, A, R, Au | `require_result_policy` + `result_view` |
 | POST | `/researches/{id}/imports/preview` | O, A, R, Op | `preview_csv` |
 | POST | `/researches/{id}/imports/{import_id}/confirm` | O, A, R, Op | `confirm_import` |
 | GET | `/audit-events` | O, A, Au | oxirgi 200 ta |
@@ -638,14 +644,12 @@ App: ErrorBoundary ─► QueryClientProvider ─► AuthProvider ─► Routes
 | `research:create`, `research:activate`, `result:calculate` | owner, admin, researcher |
 | `participant:write`, `response:write` | owner, admin, researcher, operator |
 | `result:read` | owner, admin, researcher, auditor |
-| `result:export` | owner, admin, researcher, auditor ⚠️ |
+| `result:export` | owner, admin, researcher |
 | `team:manage`, `retention:manage` | owner, admin |
 | `audit:read` | owner, admin, auditor |
 
-> ⚠️ Nomuvofiqlik: frontend `auditor`ga `result:export`ni ruxsat beradi, backend esa
-> `/results/{id}/export`ni faqat owner/admin/researcher uchun ochadi
-> (`test_auditor_and_operator_cannot_export_results`). Server authoritative — auditor
-> eksport tugmasini ko'radi, lekin 403 oladi.
+> Siyosat backend bilan mos: auditor natijani ko'radi, lekin eksport qila olmaydi
+> (`test_auditor_and_operator_cannot_export_results`).
 
 Dev server: Vite `:5173`, `/api` va `/health` → `http://127.0.0.1:8000` proxy.
 
@@ -653,7 +657,7 @@ Dev server: Vite `:5173`, `/api` va `/health` → `http://127.0.0.1:8000` proxy.
 
 | Fayl | Qamrov |
 |---|---|
-| `tests/test_api.py` (11) | bootstrap, generic login, scoring + disclaimer + idempotency, RBAC va cross-tenant, consent/pin gate'lar, revision immutability, revoked licence, summary_only redaksiya, CSV + PII |
+| `tests/test_api.py` (15) | bootstrap, generic login, scoring + disclaimer + idempotency, RBAC va cross-tenant, consent/pin gate'lar, revision immutability, revoked licence, cache/natija o'qishda consent va licence gate'i, takroriy participant/retention kodi 409, summary_only redaksiya, CSV + PII |
 | `tests/test_scoring.py` (11) | kontrakt vektorlari, insufficient data, validatsiya kodlari, norm chegaralari, half-up, AST xavfsizligi va limitlari, division by zero, norm overlap |
 | `tests/test_security_release.py` (5) | bootstrap gate, export RBAC, security headerlar, CSV encoding/hajm, version detail kontekst |
 | `tests/test_ux_backend_gaps.py` (9) | read-model'lar, pagination, JSON/CSV export, formula-safe CSV, PII AES-GCM, fail-closed, legal hold |
@@ -670,8 +674,8 @@ Ishga tushirish: `pytest -q`; frontend — `npm run typecheck && npm run lint &&
 | Auth | `AUTH_REQUIRED`, `AUTH_TOKEN_INVALID`, `AUTH_CREDENTIALS_INVALID`, `PASSWORD_TOO_WEAK`, `BOOTSTRAP_DISABLED`, `BOOTSTRAP_TOKEN_INVALID`, `BOOTSTRAP_ALREADY_COMPLETED`, `EMAIL_ALREADY_REGISTERED` |
 | Tenant / RBAC | `TENANT_ACCESS_DENIED`, `ROLE_FORBIDDEN`, `ORGANIZATION_CODE_EXISTS`, `ORGANIZATION_CONTEXT_REQUIRED`, `MEMBERSHIP_EXISTS` |
 | Registr | `METHODOLOGY_CODE_EXISTS`, `METHODOLOGY_NOT_FOUND`, `METHODOLOGY_VERSION_EXISTS`, `METHODOLOGY_VERSION_NOT_FOUND`, `METHODOLOGY_SCHEMA_INVALID`, `METHODOLOGY_NOT_PUBLISHED`, `VERSION_STATE_INVALID`, `LICENCE_METADATA_REQUIRED`, `LICENCE_NOT_VALID`, `LICENCE_NOT_FOUND`, `NORM_OVERLAP` |
-| Research | `RESEARCH_NOT_FOUND`, `RESEARCH_STATE_INVALID`, `RESEARCH_NOT_ACTIVE`, `RETENTION_POLICY_NOT_FOUND`, `NORM_PIN_INVALID`, `RESEARCH_METHODOLOGY_MISMATCH`, `RESEARCH_USE_TYPE_INVALID` |
-| Yig'ish | `PARTICIPANT_NOT_FOUND`, `CONSENT_BASIS_REQUIRED`, `CONSENT_NOT_VALID`, `RESPONSE_NOT_FOUND`, `RESPONSE_ATTEMPT_EXISTS`, `REVISION_CONFLICT`, `REVISION_NOT_FOUND`, `REVISION_NOT_CURRENT` |
+| Research | `RESEARCH_NOT_FOUND`, `RESEARCH_STATE_INVALID`, `RESEARCH_NOT_ACTIVE`, `RETENTION_POLICY_NOT_FOUND`, `RETENTION_POLICY_CODE_EXISTS`, `NORM_PIN_INVALID`, `RESEARCH_METHODOLOGY_MISMATCH`, `RESEARCH_USE_TYPE_INVALID` |
+| Yig'ish | `PARTICIPANT_NOT_FOUND`, `CONSENT_BASIS_REQUIRED`, `CONSENT_NOT_VALID`, `RESPONSE_NOT_FOUND`, `RESPONSE_ATTEMPT_EXISTS`, `PARTICIPANT_CODE_EXISTS`, `REVISION_CONFLICT`, `REVISION_NOT_FOUND`, `REVISION_NOT_CURRENT` |
 | Validatsiya | `UNKNOWN_ITEM`, `ITEM_REQUIRED`, `TYPE_INVALID`, `BOOLEAN_LITERAL_INVALID`, `OPTION_NOT_ALLOWED`, `VALUE_OUT_OF_RANGE`, `STEP_INVALID` |
 | Scoring | `RESPONSE_NOT_VALIDATED`, `METHODOLOGY_HASH_MISMATCH`, `IDEMPOTENCY_KEY_REUSED`, `CALCULATION_IN_PROGRESS`, `RESEARCH_CHANGED_DURING_RUN`, `CONSENT_CHANGED_DURING_RUN`, `LICENCE_CHANGED_DURING_RUN`, `MAPPING_NOT_FOUND`, `SCORE_OUT_OF_RANGE`, `RULE_SCHEMA_INVALID`, `RULE_LIMIT_EXCEEDED`, `DIVISION_BY_ZERO`, `RESULT_NOT_FOUND` |
 | Import | `REQUEST_BODY_TOO_LARGE`, `ENCODING_INVALID`, `FILE_TOO_LARGE`, `CSV_MALFORMED`, `DUPLICATE_HEADER`, `PII_COLUMN_FORBIDDEN`, `UNKNOWN_COLUMN`, `REQUIRED_COLUMN_MISSING`, `TEMPLATE_MISMATCH`, `ROW_DUPLICATE`, `IMPORT_NOT_FOUND`, `IMPORT_STATE_INVALID`, `IMPORT_PREVIEW_CHANGED` |
