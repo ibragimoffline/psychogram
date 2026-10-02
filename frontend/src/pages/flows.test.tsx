@@ -14,6 +14,10 @@ const json=(value:unknown,status=200)=>Promise.resolve(new Response(JSON.stringi
 // findBy* resolves once the node exists; entry animations may still hold opacity 0 for a frame.
 const visible=async(found:Promise<HTMLElement>)=>{const node=await found;await waitFor(()=>expect(node).toBeVisible());return node}
 
+const retention=(id:string,days=365)=>({id,code:`days${days}`,retention_days:days,active:true,created_at:'2026-01-01'})
+const version={id:'v1',methodology_id:'m1',methodology_code:'synth_demo',methodology_name:'Sintetik metodika',version_code:'1.0.0',lifecycle_status:'published',estimated_minutes:8,content_hash:'hash',snapshot:null,licence:{id:'l1',status:'verified',content_disclosure_level:'summary_only',allow_item_display:false,eligible:true,restrictions_i18n:{}},eligible:true,disclaimer_i18n:{}}
+async function fillResearchForm(){await userEvent.type(await screen.findByLabelText('Tadqiqot nomi'),'Yangi research');await userEvent.type(screen.getByLabelText('Maqsad'),'Valid maqsad');await userEvent.selectOptions(await screen.findByLabelText('Metodika'),'v1');expect(screen.getByRole('option',{name:'Sintetik metodika · v1.0.0 · 8 daqiqa'})).toBeInTheDocument();await userEvent.type(screen.getByLabelText(/Rozilik hujjati yoki asosi/),'ethics/1');await userEvent.type(screen.getByLabelText('Rozilik shakli versiyasi'),'1.0')}
+
 function start(path:string,fetcher:(input:RequestInfo|URL,init?:RequestInit)=>Promise<Response>){sessionStorage.setItem('psychogram_token','token');window.history.pushState({},'',path);vi.stubGlobal('fetch',vi.fn(fetcher));return render(<BrowserRouter><App/></BrowserRouter>)}
 
 beforeEach(()=>{sessionStorage.clear()})
@@ -40,11 +44,26 @@ describe('authenticated contracts',()=>{
   await waitFor(()=>{const calls=(fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([url])=>String(url).includes('/researches'));expect(calls.some(([,init])=>(init?.headers as Headers).get('X-Organization-ID')==='org2')).toBe(true)})
  })
 
- it('posts the exact research create contract and navigates to its server id',async()=>{
+ it('creates and starts a research with pilot defaults and navigates to its server id',async()=>{
+  let posted:Record<string,unknown>|undefined;let activated=0
+  start('/researches/new',async(input,init)=>{const path=String(input);if(path.includes('/auth/me'))return json(me());if(path.includes('/retention-policies'))return json([retention('ret1')]);if(path.includes('/methodology-versions/eligible'))return json([version]);if(path.endsWith('/researches')&&init?.method==='POST'){posted=JSON.parse(String(init.body));return json({...research,status:'ready'},201)}if(path.endsWith('/researches/r1/activate')){activated+=1;return json({...research,status:'active'})}if(path.endsWith('/researches'))return json([research]);return json({})})
+  await fillResearchForm();expect(screen.queryByLabelText('Saqlash muddati')).not.toBeInTheDocument();expect(screen.getByText('365 kun')).toBeInTheDocument();await userEvent.click(screen.getByRole('button',{name:'Yaratish va boshlash'}))
+  await waitFor(()=>expect(window.location.pathname).toBe('/researches/r1'));expect(activated).toBe(1);expect(posted).toEqual({name:'Yangi research',purpose:'Valid maqsad',methodology_version_id:'v1',pii_mode:'pseudonymous',consent_reference:'ethics/1',consent_version:'1.0',retention_policy_id:'ret1',use_type:'research',norm_selection:{}})
+ })
+
+ it('keeps the created research and offers to start it again when activation fails',async()=>{
+  let creates=0;let activations=0
+  start('/researches/new',async(input,init)=>{const path=String(input);if(path.includes('/auth/me'))return json(me());if(path.includes('/retention-policies'))return json([retention('ret1')]);if(path.includes('/methodology-versions/eligible'))return json([version]);if(path.endsWith('/researches')&&init?.method==='POST'){creates+=1;return json({...research,status:'ready'},201)}if(path.endsWith('/researches/r1/activate')){activations+=1;return activations===1?json({error:{code:'LICENCE_NOT_VALID',message:'Litsenziya yaroqsiz'}},409):json({...research,status:'active'})}if(path.endsWith('/researches'))return json([{...research,status:activations>1?'active':'ready'}]);return json({})})
+  await fillResearchForm();await userEvent.click(screen.getByRole('button',{name:'Yaratish va boshlash'}))
+  await waitFor(()=>expect(window.location.pathname).toBe('/researches/r1'));expect(creates).toBe(1);expect(await screen.findByText(/LICENCE_NOT_VALID/)).toBeInTheDocument();expect(screen.getByText('Boshlashga tayyor')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button',{name:'Tadqiqotni boshlash'}));await waitFor(()=>expect(activations).toBe(2));expect(creates).toBe(1);await waitFor(()=>expect(screen.queryByRole('button',{name:'Tadqiqotni boshlash'})).not.toBeInTheDocument())
+ })
+
+ it('asks for a retention period only when the organization has several',async()=>{
   let posted:Record<string,unknown>|undefined
-  start('/researches/new',async(input,init)=>{const path=String(input);if(path.includes('/auth/me'))return json(me());if(path.includes('/retention-policies'))return json([{id:'ret1',code:'days365',retention_days:365,active:true,created_at:'2026-01-01'}]);if(path.includes('/methodology-versions/eligible'))return json([{id:'v1',methodology_id:'m1',version_code:'1.0.0',lifecycle_status:'published',estimated_minutes:8,content_hash:'hash',snapshot:null,licence:{id:'l1',status:'verified',content_disclosure_level:'summary_only',allow_item_display:false,eligible:true,restrictions_i18n:{}},eligible:true,disclaimer_i18n:{}}]);if(path.endsWith('/researches')&&init?.method==='POST'){posted=JSON.parse(String(init.body));return json({...research,status:'draft'},201)}if(path.endsWith('/researches'))return json([research]);return json({})})
-  await userEvent.type(await screen.findByLabelText('Tadqiqot nomi'),'Yangi research');await userEvent.type(screen.getByLabelText('Maqsad'),'Valid maqsad');await userEvent.selectOptions(screen.getByLabelText('Nashr qilingan versiya'),'v1');await userEvent.type(screen.getByLabelText('Rozilik manbasi'),'ethics/1');await userEvent.type(screen.getByLabelText('Rozilik versiyasi'),'1.0');await userEvent.selectOptions(screen.getByLabelText('Retention siyosati'),'ret1');await userEvent.click(screen.getByRole('button',{name:'Draft yaratish'}))
-  await waitFor(()=>expect(window.location.pathname).toBe('/researches/r1'));expect(posted).toMatchObject({name:'Yangi research',purpose:'Valid maqsad',methodology_version_id:'v1',retention_policy_id:'ret1',pii_mode:'pseudonymous',norm_selection:{}})
+  start('/researches/new',async(input,init)=>{const path=String(input);if(path.includes('/auth/me'))return json(me());if(path.includes('/retention-policies'))return json([retention('ret1'),retention('ret2',730)]);if(path.includes('/methodology-versions/eligible'))return json([version]);if(path.endsWith('/researches')&&init?.method==='POST'){posted=JSON.parse(String(init.body));return json({...research,status:'ready'},201)}if(path.endsWith('/activate'))return json({...research,status:'active'});if(path.endsWith('/researches'))return json([research]);return json({})})
+  await fillResearchForm();await userEvent.selectOptions(screen.getByLabelText('Saqlash muddati'),'ret2');await userEvent.click(screen.getByRole('button',{name:'Yaratish va boshlash'}))
+  await waitFor(()=>expect(posted?.retention_policy_id).toBe('ret2'))
  })
 
  it('uses server preview hash unchanged when confirming CSV',async()=>{
