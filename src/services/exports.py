@@ -4,10 +4,25 @@ import csv
 import io
 from typing import Any
 
+from dataclasses import dataclass
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.models.domain import Result
+from src.models.domain import (
+    Methodology,
+    MethodologyVersion,
+    Organization,
+    Participant,
+    Research,
+    Response,
+    ResponseRevision,
+    Result,
+    ScaleResult,
+)
+from src.services.domain import latest_consent
 from src.services.orchestration import result_view
+from src.services.registry import check_licence, latest_licence
 
 DISCLAIMER = "Bu natija tibbiy tashxis emas."
 FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
@@ -73,6 +88,112 @@ def build_csv_export(db: Session, result: Result, disclosure_level: str) -> str:
             ]
         )
     return output.getvalue()
+
+
+@dataclass
+class ResearchExport:
+    csv_text: str
+    rows: int
+    not_calculated: int
+    excluded_consent: int
+
+
+def build_research_csv(
+    db: Session, tenant: Organization, research: Research
+) -> ResearchExport:
+    """One row per respondent with the result of their current answers.
+
+    The whole file is refused when the licence does not allow use; rows whose
+    participant no longer has valid consent are left out and counted.
+    """
+    version = db.get(MethodologyVersion, research.methodology_version_id)
+    methodology = db.get(Methodology, version.methodology_id) if version else None
+    assert version is not None and methodology is not None
+    check_licence(
+        latest_licence(db, version.id),
+        org_type=tenant.org_type,
+        region=tenant.region,
+        use_type=research.use_type,
+    )
+    snapshot = version.snapshot
+    interpreted = {
+        rule.get("scale_code") for rule in snapshot.get("interpretations", [])
+    }
+    columns: list[tuple[str, str, str]] = []
+    for scale in snapshot["scales"]:
+        code = scale["scale_code"]
+        columns += [(f"{code}_score", code, "score_display")]
+        columns += [(f"{code}_validity_status", code, "validity_status")]
+        if scale.get("norm") or snapshot.get("norm"):
+            columns += [(f"{code}_norm_band", code, "norm_band_code")]
+        if code in interpreted or None in interpreted:
+            columns += [(f"{code}_interpretation_code", code, "interpretation_code")]
+
+    output = io.StringIO(newline="")
+    output.write("\ufeff")  # lets Excel detect UTF-8
+    writer = csv.writer(output, lineterminator="\r\n")
+    writer.writerow(
+        [
+            "participant_code",
+            "methodology_code",
+            "version_code",
+            "response_revision",
+            "result_id",
+            "calculated_at",
+        ]
+        + [name for name, _, _ in columns]
+    )
+    rows = not_calculated = excluded_consent = 0
+    responses = db.execute(
+        select(Response, Participant)
+        .join(Participant, Participant.id == Response.participant_id)
+        .where(
+            Response.tenant_id == research.tenant_id,
+            Response.research_id == research.id,
+        )
+        .order_by(Participant.external_code, Response.attempt_key)
+    ).all()
+    for response, participant in responses:
+        consent = latest_consent(db, participant.id)
+        if not consent or consent.status not in {"granted", "not_required_with_basis"}:
+            excluded_consent += 1
+            continue
+        result = db.scalar(
+            select(Result)
+            .where(
+                Result.tenant_id == research.tenant_id,
+                Result.response_revision_id == response.current_revision_id,
+            )
+            .order_by(Result.calculated_at.desc())
+        )
+        if not result:
+            not_calculated += 1
+            continue
+        revision = db.get(ResponseRevision, result.response_revision_id)
+        scales = {
+            row.scale_code: row
+            for row in db.scalars(
+                select(ScaleResult).where(ScaleResult.result_id == result.id)
+            ).all()
+        }
+        values: list[str] = []
+        for _, scale_code, field in columns:
+            value = getattr(scales[scale_code], field) if scale_code in scales else None
+            # Scores are canonical decimals from the engine and stay numeric for analysis.
+            values.append(value or "" if field == "score_display" else csv_safe(value))
+        writer.writerow(
+            [
+                csv_safe(participant.external_code),
+                csv_safe(methodology.methodology_code),
+                csv_safe(version.version_code),
+                revision.revision_number if revision else "",
+                result.id,
+                result.calculated_at.isoformat(),
+            ]
+            + values
+        )
+        rows += 1
+    return ResearchExport(output.getvalue(), rows, not_calculated, excluded_consent)
 
 
 def redact_trace(trace: list[dict[str, Any]], disclosure_level: str) -> list[dict]:

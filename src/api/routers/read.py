@@ -58,7 +58,11 @@ from src.schemas.read import (
 )
 from src.services.audit import audit
 from src.services.domain import validation_issues
-from src.services.exports import build_csv_export, build_json_export
+from src.services.exports import (
+    build_csv_export,
+    build_json_export,
+    build_research_csv,
+)
 from src.services.orchestration import _effective_disclosure, require_result_policy
 from src.services.pii import delete_pii, upsert_pii, view_pii
 from src.services.registry import check_licence, latest_licence
@@ -585,6 +589,46 @@ def export_result(
             headers=headers,
         )
     return JSONResponse(build_json_export(db, result, disclosure), headers=headers)
+
+
+@router.get("/researches/{research_id}/export", tags=["results"])
+def export_research(
+    research_id: str,
+    context: Annotated[TenantContext, Depends(roles("owner", "admin", "researcher"))],
+    actor: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    format: str = Query("csv", pattern="^csv$"),
+):
+    research = _research(db, context, research_id)
+    export = build_research_csv(db, context.organization, research)
+    summary = {
+        "rows": export.rows,
+        "not_calculated": export.not_calculated,
+        "excluded_consent": export.excluded_consent,
+    }
+    audit(
+        db,
+        actor_id=actor.id,
+        tenant_id=context.organization.id,
+        research_id=research.id,
+        action="research.export",
+        object_type="research",
+        object_id=research.id,
+        safe_metadata={"format": format, **summary},
+    )
+    db.commit()
+    return PlainTextResponse(
+        export.csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="psychogram-research-{research.id}.csv"'
+            ),
+            "X-Export-Rows": str(export.rows),
+            "X-Export-Not-Calculated": str(export.not_calculated),
+            "X-Export-Excluded-Consent": str(export.excluded_consent),
+        },
+    )
 
 
 @router.put(

@@ -51,6 +51,12 @@ def create_app(
             "X-Organization-ID",
             "Idempotency-Key",
         ],
+        expose_headers=[
+            "Content-Disposition",
+            "X-Export-Rows",
+            "X-Export-Not-Calculated",
+            "X-Export-Excluded-Consent",
+        ],
     )
     application.add_middleware(
         APISecurityMiddleware,

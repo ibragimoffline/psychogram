@@ -79,6 +79,7 @@ def _is_sensitive(path: str) -> bool:
         path.startswith("/api/v1/results")
         or path.endswith("/calculations")
         or path.endswith("/pii")
+        or path.endswith("/export")
     )
 
 
