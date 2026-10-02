@@ -94,7 +94,7 @@ psychogram/
 │       └── pii.py               # AES-GCM PII saqlash
 ├── alembic/versions/            # 0001_initial, 0002_pii_aes_gcm_envelope
 ├── config/settings.py           # Eski import yo'li uchun re-export
-├── tests/                       # pytest (48 funksiya, 57 holat)
+├── tests/                       # pytest (51 funksiya, 60 holat)
 ├── frontend/                    # React SPA
 └── docs/                        # 01..07 mahsulot, metodika, UX, QA hujjatlari
 ```
@@ -147,6 +147,8 @@ HTTP ─► APISecurityMiddleware ─► CORSMiddleware ─► Router (auth / v1
 | `jwt_secret` | tasodifiy | productionda explicit va ≥32 belgi shart |
 | `jwt_algorithm` / `access_token_minutes` | `HS256` / `60` | |
 | `bootstrap_enabled` / `bootstrap_token` | `false` / — | yoqilsa token ≥32 belgi |
+| `registration_enabled` | `false` | ochiq `/auth/register`; pilotda o'chiq |
+| `csv_import_enabled` | `false` | CSV preview/confirm; pilotning birinchi relizida o'chiq |
 | `pii_encryption_key` / `pii_key_version` | — / `v1` | Base64, aniq 32 bayt |
 | `cors_origins` | localhost:3000,5173 | `*` taqiqlangan |
 | `max_csv_bytes` / `max_csv_rows` | 1 000 000 / 10 000 | |
@@ -186,6 +188,7 @@ Validatorlar: `reject_wildcard_cors`, `validate_production_secrets`, `validate_p
 |---|---|
 | `get_db(request)` | Request uchun Session yaratib, oxirida yopadi |
 | `get_runtime_settings(request)` | `app.state.settings` |
+| `require_csv_import(settings)` | `csv_import_enabled=false` bo'lsa `CSV_IMPORT_DISABLED` 404 |
 | `current_user(...)` | Bearer JWT → aktiv `User`, aks holda `AUTH_REQUIRED` 401 |
 | `platform_admin(user)` | `is_platform_admin` talab qiladi → `ROLE_FORBIDDEN` 403 |
 | `TenantContext` | `organization` + `membership` dataclass |
@@ -320,7 +323,7 @@ Audit `action` qiymatlari: `auth.bootstrap`, `auth.login`, `organization.registe
 |---|---|---|
 | `canonical_answer_hash(answers)` | Saralangan JSON → `sha256:...` | |
 | `bootstrap_user(db, payload, configured_token, *, enabled)` | Bo'sh DBda birinchi platform admin; token SHA-256 digest bilan constant-time solishtiriladi | `BOOTSTRAP_DISABLED` 404, `BOOTSTRAP_TOKEN_INVALID` 403, `BOOTSTRAP_ALREADY_COMPLETED` 409 |
-| `register_owner(db, payload)` | User + Organization + `owner` membership (`can_view_pii=true`) | `EMAIL_ALREADY_REGISTERED`, `ORGANIZATION_CODE_EXISTS` 409 |
+| `register_owner(db, payload, *, actor_id=None)` | User + Organization + `owner` membership (`can_view_pii=true`); `actor_id` berilsa (admin) audit `organization.create`, aks holda `organization.register` | `EMAIL_ALREADY_REGISTERED`, `ORGANIZATION_CODE_EXISTS` 409 |
 | `authenticate(db, email, password)` | Login; muvaffaqiyatsizlik ham audit qilinadi, xabar generic | `AUTH_CREDENTIALS_INVALID` 401 |
 | `add_member(db, tenant_id, payload, actor_id)` | Mavjud yoki yangi userni tenantga qo'shadi | `MEMBERSHIP_EXISTS` 409 |
 | `create_research(db, tenant, payload, actor_id)` | Published version + tenant retention policy + licence tekshiruvi; status `ready`; norm tanlanmasa default normlar; `ResearchMethodologyPin` yaratadi | `METHODOLOGY_NOT_PUBLISHED`, `RETENTION_POLICY_NOT_FOUND`, `LICENCE_NOT_VALID`, `NORM_PIN_INVALID` |
@@ -493,7 +496,7 @@ operator/auditor), `MemberView`, `MethodologyCreate`, `MethodologyView`,
 `CSVPreviewRequest`, `ImportPreviewView`, `ImportConfirmRequest`, `ImportConfirmView`.
 
 **`schemas/read.py` (read-model):** `RetentionPolicyView`, `LicenceDetailView`,
-`MethodologyVersionDetailView`, `MethodologyDetailView`, `ParticipantListItem`,
+`MethodologyVersionDetailView` (+ `methodology_code`, `methodology_name`), `MethodologyDetailView`, `ParticipantListItem`,
 `ParticipantPage`, `ParticipantDetailView`, `ConsentHistoryItem`, `ConsentHistoryView`,
 `RevisionDetailView` (+ `validation_issues`), `ResponseListItem`, `ResponsePage`, `ResponseDetailView`,
 `RevisionHistoryView`, `ResultSummaryView`, `ResultPage`, `PIIWrite`, `PIIView`.
@@ -509,13 +512,14 @@ Tenant endpointlari uchun headerlar: `Authorization: Bearer <token>` va
 | Metod | Yo'l | Ruxsat | Servis |
 |---|---|---|---|
 | POST | `/auth/bootstrap` | token + flag | `bootstrap_user` |
-| POST | `/auth/register` | ochiq | `register_owner` |
+| POST | `/auth/register` | ochiq, faqat `registration_enabled=true` | `register_owner`; aks holda `REGISTRATION_DISABLED` 404 |
 | POST | `/auth/login` | ochiq | `authenticate` |
 | GET | `/auth/me` | token | membershiplar ro'yxati |
 
 ### Write — `routers/v1.py`
 | Metod | Yo'l | Ruxsat | Servis |
 |---|---|---|---|
+| POST | `/organizations` | PA | `register_owner(actor_id=admin)` — tashkilot + owner |
 | GET | `/organizations/current` | har qanday member | — |
 | GET / POST | `/organizations/current/members` | O, A | `add_member` |
 | POST | `/retention-policies` | O, A | to'g'ridan-to'g'ri ORM; takroriy kod → `RETENTION_POLICY_CODE_EXISTS` 409 |
@@ -534,7 +538,7 @@ Tenant endpointlari uchun headerlar: `Authorization: Bearer <token>` va
 | POST | `/responses/{id}/validate` | O, A, R, Op | `validate_revision` |
 | POST | `/researches/{id}/calculations` | O, A, R | `calculate` |
 | GET | `/results/{id}` | O, A, R, Au | `require_result_policy` + `result_view` |
-| POST | `/researches/{id}/imports/preview` | O, A, R, Op | `preview_csv` |
+| POST | `/researches/{id}/imports/preview` | O, A, R, Op + `require_csv_import` | `preview_csv` |
 | POST | `/researches/{id}/imports/{import_id}/confirm` | O, A, R, Op | `confirm_import` |
 | GET | `/audit-events` | O, A, Au | oxirgi 200 ta |
 
@@ -604,7 +608,7 @@ CalculationRun:      running ──► succeeded
 ```
 main.tsx ─► BrowserRouter ─► App
 App: ErrorBoundary ─► QueryClientProvider ─► AuthProvider ─► Routes
-      /login, /register, /setup/bootstrap (faqat DEV + VITE_ENABLE_BOOTSTRAP)
+      /login, /register (faqat VITE_ENABLE_REGISTRATION), /setup/bootstrap (faqat DEV + VITE_ENABLE_BOOTSTRAP)
       Protected ─► AppShell (rail + topbar + mobile nav) ─► sahifalar
 ```
 
@@ -614,11 +618,14 @@ App: ErrorBoundary ─► QueryClientProvider ─► AuthProvider ─► Routes
   code, message, details)`ga aylantiradi; `download(...)` — blob orqali fayl;
   `safeMessage(error)`. Base URL — `VITE_API_ORIGIN`.
 - `context/AuthContext.tsx` — `AuthProvider` (token va tanlangan tenant `sessionStorage`da),
-  `useAuth()` (`token`, `me`, `membership`, `setSession`, `selectTenant`, `logout`),
-  `useApi()` — token va tenant'ni avtomatik qo'shadi.
+  `useAuth()` (`token`, `me`, `membership`, `setSession`, `selectTenant`, `logout`,
+  `expireSession`), `useApi()` — token va tenant'ni avtomatik qo'shadi; autentifikatsiyali
+  so'rov 401 qaytarsa sessiyani tugatadi va login sahifasi "Sessiya tugadi" xabarini ko'rsatadi.
+- `lib/queryClient.ts` — ilova bo'ylab yagona `QueryClient` (testlarda har testdan keyin tozalanadi).
 - `lib/capabilities.ts` — `Capability` turlari va rol siyosati; `can(role, capability)`,
   `canAccessPii(membership)`.
-- `lib/features.ts` — `bootstrapEnabled()`, `maxCsvBytes()`.
+- `lib/features.ts` — `bootstrapEnabled()`, `registrationEnabled()` (`VITE_ENABLE_REGISTRATION`),
+  `csvImportEnabled()` (`VITE_ENABLE_CSV_IMPORT`), `maxCsvBytes()`. Ikkala yangi flag default `false`.
 - `lib/queryKeys.ts` — `tenantKey(orgId, ...parts)` — cache tenant bo'yicha ajratiladi;
   tenant almashganda `queryClient.clear()`.
 - `components/` — `AppShell`, `RequireCapability`, `ErrorBoundary` (raw xatoni
@@ -637,6 +644,13 @@ App: ErrorBoundary ─► QueryClientProvider ─► AuthProvider ─► Routes
 | `ResponsePages.tsx` | `ResponsesPage`, `ManualResponse`, `ResponseDetailPage` (validate, calculate) | `/researches/:id/responses[/new]`, `/responses/:id` |
 | `ResultImportPages.tsx` | `ImportPage`, `ResultsPage`, `ResultDetail` (export) | `/researches/:id/import`, `/results[/:id]` |
 | `AdminPages.tsx` | `TeamPage`, `RetentionPage`, `AuditPage`, `MethodologiesPage`, `MethodologyDetail`, `RegistryPage` | `/team`, `/retention`, `/audit`, `/methodologies[/:id]`, `/registry` |
+
+**Pilot menyusi:** asosiy menyuda faqat Tadqiqotlar va Metodikalar (owner/admin/auditor uchun
+rol bo'yicha Jamoa, Retention, Audit; platform admin uchun Registry). Natijalar tadqiqot ichida.
+"Yangi tadqiqot" formasi `use_type=research` va `pii_mode=pseudonymous`ni o'zi qo'yadi, metodikani
+nomi bilan ko'rsatadi, yagona retention siyosatini avtomatik qo'llaydi va "Yaratish va boshlash"
+bilan create + activate'ni ketma-ket bajaradi; aktivlash xato bersa shu tadqiqotda
+"Tadqiqotni boshlash" tugmasi qoladi (`draft` va `ready` holatlari uchun).
 
 **Frontend capability siyosati**
 
@@ -660,11 +674,11 @@ Dev server: Vite `:5173`, `/api` va `/health` → `http://127.0.0.1:8000` proxy.
 |---|---|
 | `tests/test_api.py` (16) | bootstrap, generic login, scoring + disclaimer + idempotency, RBAC va cross-tenant, consent/pin gate'lar, revision immutability, revoked licence, cache/natija o'qishda consent va licence gate'i, takroriy participant/retention kodi 409, har bir savol bo'yicha validatsiya xatolari, summary_only redaksiya, CSV + PII |
 | `tests/test_scoring.py` (11) | kontrakt vektorlari, insufficient data, validatsiya kodlari, norm chegaralari, half-up, AST xavfsizligi va limitlari, division by zero, norm overlap |
-| `tests/test_security_release.py` (5) | bootstrap gate, export RBAC, security headerlar, CSV encoding/hajm, version detail kontekst |
+| `tests/test_security_release.py` (7) | bootstrap gate, export RBAC, security headerlar, CSV encoding/hajm, version detail kontekst, yopiq registratsiya + admin tashkilot yaratishi, CSV import flag'i |
 | `tests/test_ux_backend_gaps.py` (9) | read-model'lar, pagination, JSON/CSV export, formula-safe CSV, PII AES-GCM, fail-closed, legal hold |
-| `tests/test_config.py` (5) | production secret va bootstrap token validatsiyasi |
+| `tests/test_config.py` (6) | production secret, bootstrap token validatsiyasi, registratsiya default o'chiq |
 | `tests/test_migrations.py` (2) | toza `upgrade head` va 0001→0002 |
-| `frontend/src/**/*.test.ts(x)` | api client, capability siyosati, UI, Drawer, ErrorBoundary, flows, import safety |
+| `frontend/src/**/*.test.ts(x)` (40) | api client, capability siyosati, UI, Drawer, ErrorBoundary, pilot menyusi va flag'lar, tadqiqotni yaratish va boshlash, sessiya tugashi, flows, import safety |
 
 Ishga tushirish: `pytest -q`; frontend — `npm run typecheck && npm run lint && npm run test && npm run build`.
 
@@ -672,13 +686,13 @@ Ishga tushirish: `pytest -q`; frontend — `npm run typecheck && npm run lint &&
 
 | Guruh | Kodlar |
 |---|---|
-| Auth | `AUTH_REQUIRED`, `AUTH_TOKEN_INVALID`, `AUTH_CREDENTIALS_INVALID`, `PASSWORD_TOO_WEAK`, `BOOTSTRAP_DISABLED`, `BOOTSTRAP_TOKEN_INVALID`, `BOOTSTRAP_ALREADY_COMPLETED`, `EMAIL_ALREADY_REGISTERED` |
+| Auth | `REGISTRATION_DISABLED`, `AUTH_REQUIRED`, `AUTH_TOKEN_INVALID`, `AUTH_CREDENTIALS_INVALID`, `PASSWORD_TOO_WEAK`, `BOOTSTRAP_DISABLED`, `BOOTSTRAP_TOKEN_INVALID`, `BOOTSTRAP_ALREADY_COMPLETED`, `EMAIL_ALREADY_REGISTERED` |
 | Tenant / RBAC | `TENANT_ACCESS_DENIED`, `ROLE_FORBIDDEN`, `ORGANIZATION_CODE_EXISTS`, `ORGANIZATION_CONTEXT_REQUIRED`, `MEMBERSHIP_EXISTS` |
 | Registr | `METHODOLOGY_CODE_EXISTS`, `METHODOLOGY_NOT_FOUND`, `METHODOLOGY_VERSION_EXISTS`, `METHODOLOGY_VERSION_NOT_FOUND`, `METHODOLOGY_SCHEMA_INVALID`, `METHODOLOGY_NOT_PUBLISHED`, `VERSION_STATE_INVALID`, `LICENCE_METADATA_REQUIRED`, `LICENCE_NOT_VALID`, `LICENCE_NOT_FOUND`, `NORM_OVERLAP` |
 | Research | `RESEARCH_NOT_FOUND`, `RESEARCH_STATE_INVALID`, `RESEARCH_NOT_ACTIVE`, `RETENTION_POLICY_NOT_FOUND`, `RETENTION_POLICY_CODE_EXISTS`, `NORM_PIN_INVALID`, `RESEARCH_METHODOLOGY_MISMATCH`, `RESEARCH_USE_TYPE_INVALID` |
 | Yig'ish | `PARTICIPANT_NOT_FOUND`, `CONSENT_BASIS_REQUIRED`, `CONSENT_NOT_VALID`, `RESPONSE_NOT_FOUND`, `RESPONSE_ATTEMPT_EXISTS`, `PARTICIPANT_CODE_EXISTS`, `REVISION_CONFLICT`, `REVISION_NOT_FOUND`, `REVISION_NOT_CURRENT` |
 | Validatsiya | `UNKNOWN_ITEM`, `ITEM_REQUIRED`, `TYPE_INVALID`, `BOOLEAN_LITERAL_INVALID`, `OPTION_NOT_ALLOWED`, `VALUE_OUT_OF_RANGE`, `STEP_INVALID` |
 | Scoring | `RESPONSE_NOT_VALIDATED`, `METHODOLOGY_HASH_MISMATCH`, `IDEMPOTENCY_KEY_REUSED`, `CALCULATION_IN_PROGRESS`, `RESEARCH_CHANGED_DURING_RUN`, `CONSENT_CHANGED_DURING_RUN`, `LICENCE_CHANGED_DURING_RUN`, `MAPPING_NOT_FOUND`, `SCORE_OUT_OF_RANGE`, `RULE_SCHEMA_INVALID`, `RULE_LIMIT_EXCEEDED`, `DIVISION_BY_ZERO`, `RESULT_NOT_FOUND` |
-| Import | `REQUEST_BODY_TOO_LARGE`, `ENCODING_INVALID`, `FILE_TOO_LARGE`, `CSV_MALFORMED`, `DUPLICATE_HEADER`, `PII_COLUMN_FORBIDDEN`, `UNKNOWN_COLUMN`, `REQUIRED_COLUMN_MISSING`, `TEMPLATE_MISMATCH`, `ROW_DUPLICATE`, `IMPORT_NOT_FOUND`, `IMPORT_STATE_INVALID`, `IMPORT_PREVIEW_CHANGED` |
+| Import | `CSV_IMPORT_DISABLED`, `REQUEST_BODY_TOO_LARGE`, `ENCODING_INVALID`, `FILE_TOO_LARGE`, `CSV_MALFORMED`, `DUPLICATE_HEADER`, `PII_COLUMN_FORBIDDEN`, `UNKNOWN_COLUMN`, `REQUIRED_COLUMN_MISSING`, `TEMPLATE_MISMATCH`, `ROW_DUPLICATE`, `IMPORT_NOT_FOUND`, `IMPORT_STATE_INVALID`, `IMPORT_PREVIEW_CHANGED` |
 | Export | `EXPORT_FORMAT_UNSUPPORTED` |
 | PII | `PII_STORAGE_NOT_CONFIGURED`, `PII_KEY_NOT_CONFIGURED`, `PII_KEY_VERSION_UNAVAILABLE`, `PII_DECRYPTION_FAILED`, `PII_NOT_FOUND`, `PII_MODE_NOT_IDENTIFIED`, `PII_ROLE_FORBIDDEN`, `PII_PERMISSION_REQUIRED`, `PII_DELETE_LEGAL_HOLD` |
