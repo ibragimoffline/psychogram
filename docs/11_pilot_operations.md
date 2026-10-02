@@ -74,9 +74,9 @@ keyin staging bazasi o'chiriladi.
 Kodga yangi `UPDATE` yoki `DELETE` yo'li qo'shilsa, skript ham yangilanadi; aks holda API
 `permission denied` bilan 500 qaytaradi. Smoke sinovi barcha ruxsat etilgan yo'llarni qamraydi.
 
-Cheklov: `response_revisions`da `UPDATE` bor (validatsiya holati uchun). Tasdiqlangan revisionni
-SQL orqali o'zgartirishdan hozircha faqat ORM hook himoya qiladi; to'liq himoya uchun baza
-trigger'i kerak.
+`response_revisions` va `methodology_versions`da `UPDATE` huquqi bor (qoralama holatini
+o'zgartirish uchun). Tasdiqlangan revision va nashr qilingan versiyani esa `0003` migratsiyasidagi
+trigger'lar har qanday rol uchun, jumladan owner uchun ham, bloklaydi.
 
 ## 5. 2026-10-02 dagi sinov dalillari
 
@@ -94,6 +94,10 @@ PostgreSQL xizmatiga tegilmagan.
 | `pg_dump -Fc` (122 KB) → yangi bazaga `pg_restore --exit-on-error` | O'tdi |
 | `scripts/compare_databases.py` manba ↔ tiklangan | 34/34 jadval mos (soni va checksum) |
 | Solishtirishning sezgirligi: tiklangan bazada bitta qator o'zgartirildi | `DIFF organizations` |
+| `0003` trigger'lari: upgrade → downgrade -1 → upgrade, `alembic check` | O'tdi, farq yo'q |
+| Trigger'lar bilan `pilot_smoke.py --with-pii` (app rol) | 16/16 PASS |
+| `UPDATE` tasdiqlangan revision / nashr qilingan versiya (app rol va owner) | Rad etildi: "… is immutable" |
+| `UPDATE` validatsiyadan o'tmagan revision (app rol) | Ruxsat berildi (ORM qoidasi bilan bir xil) |
 | API to'xtatilib qayta ishga tushirildi (asl baza) | Ma'lumotlar joyida; o'qish va yozish ishladi |
 | Tiklangan bazada API, xuddi shu PII kaliti bilan | Tadqiqot CSV eksporti bayt-ma-bayt bir xil; natija, yopilgan holat va shifrlangan PII bir xil |
 | Server loglarida PII, javob, parol yoki token qidiruvi | Topilmadi (faqat so'rov qatorlari) |
@@ -184,5 +188,3 @@ yakunlaydi. Har bir qadamda kuzatilgan muammo va vaqt yoziladi.
 - Excel'da CSV ko'rinishi; kerak bo'lsa nuqta-vergulli variant.
 - Retention bo'yicha mas'ul va o'chirish jarayoni.
 - MFA yoki step-up authentication (README'dagi release gate) — IdP/proxy darajasida.
-- `response_revisions` uchun baza trigger'i (4-bo'lim).
-- Tadqiqotlar ro'yxatida respondent va natija sonlari (08, ekran 2).

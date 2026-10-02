@@ -97,7 +97,7 @@ psychogram/
 ├── config/settings.py           # Eski import yo'li uchun re-export
 ├── deploy/                      # postgres/app_role.sql, nginx/psychogram.conf.example
 ├── scripts/                     # pilot_smoke.py, compare_databases.py
-├── tests/                       # pytest (65 funksiya, 74 holat)
+├── tests/                       # pytest (67 funksiya, 76 holat)
 ├── frontend/                    # React SPA
 └── docs/                        # 01..07 mahsulot, metodika, UX, QA hujjatlari
 ```
@@ -305,6 +305,10 @@ ColumnMapping (MethodologyVersion uchun CSV shablon)
 - `0001_initial` — barcha jadvallar.
 - `0002_pii_aes_gcm` — `participant_pii`ga `nonce`, `algorithm`, `key_version`,
   `field_names`, `updated_at/by` qo'shadi; legacy qatorlar bo'lsa upgrade'ni to'xtatadi.
+- `0003_immutability_triggers` — PostgreSQL va SQLite trigger'lari: eski holati
+  `validated/superseded/withdrawn` bo'lgan `response_revisions` qatori va
+  `published/deprecated/withdrawn` bo'lgan `methodology_versions` qatori `UPDATE` qilinmaydi.
+  ORM hook bilan bir xil qoida, lekin har qanday ulanish uchun (owner rol ham).
 
 ## 6. Servislar va funksiyalar
 
@@ -537,7 +541,7 @@ Tenant endpointlari uchun headerlar: `Authorization: Bearer <token>` va
 | POST | `/methodologies/{id}/versions` | PA | `create_version` |
 | POST | `/methodology-versions/{id}/licences` | PA | `create_licence` |
 | POST | `/methodology-versions/{id}/publish` | PA | `publish_version` |
-| GET | `/researches` | member | — |
+| GET | `/researches` | member | `ResearchListItem`: + `methodology_name`, `version_code`, `respondent_count`, `calculated_count` |
 | POST | `/researches` | O, A, R | `create_research` |
 | POST | `/researches/{id}/activate` | O, A, R | `activate_research` |
 | POST | `/researches/{id}/close` | O, A, R | `close_research`; hisoblanmagan javoblar bo'lsa `confirm_uncalculated` talab qilinadi |
@@ -697,16 +701,16 @@ Dev server: Vite `:5173`, `/api` va `/health` → `http://127.0.0.1:8000` proxy.
 
 | Fayl | Qamrov |
 |---|---|
-| `tests/test_api.py` (20) | bootstrap, generic login, scoring + disclaimer + idempotency, RBAC va cross-tenant, consent/pin gate'lar, revision immutability, revoked licence, cache/natija o'qishda consent va licence gate'i, takroriy participant/retention kodi 409, har bir savol bo'yicha validatsiya xatolari, tuzatish sababi qoidasi, ro'yxatdagi natija holati, summary_only redaksiya, CSV + PII |
+| `tests/test_api.py` (21) | bootstrap, generic login, scoring + disclaimer + idempotency, RBAC va cross-tenant, consent/pin gate'lar, revision immutability, revoked licence, cache/natija o'qishda consent va licence gate'i, takroriy participant/retention kodi 409, har bir savol bo'yicha validatsiya xatolari, tuzatish sababi qoidasi, ro'yxatdagi natija holati, summary_only redaksiya, CSV + PII |
 | `tests/test_scoring.py` (11) | kontrakt vektorlari, insufficient data, validatsiya kodlari, norm chegaralari, half-up, AST xavfsizligi va limitlari, division by zero, norm overlap |
 | `tests/test_security_release.py` (7) | bootstrap gate, export RBAC, security headerlar, CSV encoding/hajm, version detail kontekst, yopiq registratsiya + admin tashkilot yaratishi, CSV import flag'i |
 | `tests/test_ux_backend_gaps.py` (9) | read-model'lar, pagination, JSON/CSV export, formula-safe CSV, PII AES-GCM, fail-closed, legal hold |
 | `tests/test_config.py` (6) | production secret, bootstrap token validatsiyasi, registratsiya default o'chiq |
-| `tests/test_migrations.py` (2) | toza `upgrade head` va 0001→0002 |
+| `tests/test_migrations.py` (3) | toza `upgrade head`, 0001→head, immutability trigger'lari |
 | `tests/test_research_close.py` (4) | yopish, hisoblanmagan javoblar soni va tasdiq, yopilgandan keyingi bloklar, rol |
 | PostgreSQL | `PSYCHOGRAM_TEST_DATABASE_URL` berilsa API testlari shu bazada ishlaydi (74 passed, PostgreSQL 18) |
 | `tests/test_research_export.py` (6) | qator tarkibi va hisobotlar, eskirgan natija chiqmasligi, formula himoyasi, 105 respondent, litsenziya, rol va tenant |
-| `frontend/src/**/*.test.ts(x)` (54) | api client, capability siyosati, UI, Drawer, ErrorBoundary, pilot menyusi va flag'lar, tadqiqotni yaratish va boshlash, sessiya tugashi, javob formasi (rozilik, qoralama, savol yonidagi xatolar, dublikatsiz qayta urinish, tuzatish sababi), javoblar ro'yxati, tadqiqotni yakunlash, CSV yuklash, eskirgan natija belgisi, flows, import safety |
+| `frontend/src/**/*.test.ts(x)` (55) | api client, capability siyosati, UI, Drawer, ErrorBoundary, pilot menyusi va flag'lar, tadqiqotni yaratish va boshlash, sessiya tugashi, javob formasi (rozilik, qoralama, savol yonidagi xatolar, dublikatsiz qayta urinish, tuzatish sababi), javoblar ro'yxati, tadqiqotni yakunlash, CSV yuklash, eskirgan natija belgisi, flows, import safety |
 
 Ishga tushirish: `pytest -q`; frontend — `npm run typecheck && npm run lint && npm run test && npm run build`.
 
