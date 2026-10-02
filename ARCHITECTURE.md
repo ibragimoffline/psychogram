@@ -94,7 +94,7 @@ psychogram/
 │       └── pii.py               # AES-GCM PII saqlash
 ├── alembic/versions/            # 0001_initial, 0002_pii_aes_gcm_envelope
 ├── config/settings.py           # Eski import yo'li uchun re-export
-├── tests/                       # pytest (51 funksiya, 60 holat)
+├── tests/                       # pytest (54 funksiya, 63 holat)
 ├── frontend/                    # React SPA
 └── docs/                        # 01..07 mahsulot, metodika, UX, QA hujjatlari
 ```
@@ -333,7 +333,7 @@ Audit `action` qiymatlari: `auth.bootstrap`, `auth.login`, `organization.registe
 | `latest_consent(db, participant_id)` | Eng oxirgi consent yozuvi | |
 | `require_valid_consent(db, participant_id)` | `granted` yoki asosli `not_required_with_basis` | `CONSENT_NOT_VALID` 409 |
 | `create_response(db, research, payload, actor_id)` | Aktiv research + participant + consent; 1-revision; `finalize=true` bo'lsa darhol validatsiya | `RESPONSE_ATTEMPT_EXISTS`, `PARTICIPANT_NOT_FOUND` |
-| `revise_response(db, response, payload, actor_id)` | `expected_lock_version` mos bo'lsa yangi revision, `lock_version+1` | `REVISION_CONFLICT` 409 |
+| `revise_response(db, response, payload, actor_id)` | `expected_lock_version` mos bo'lsa yangi revision, `lock_version+1`; joriy revision `validated` bo'lsa bo'sh bo'lmagan `correction_reason` shart | `REVISION_CONFLICT` 409, `CORRECTION_REASON_REQUIRED` 400 |
 | `_new_revision(...)` | Revision raqami, normalizatsiya, hash; `current_revision_id` yangilanadi | |
 | `validate_revision(db, response, revision, actor_id)` | Faqat joriy revision; allaqachon `validated`/`validation_failed` bo'lsa o'zgarishsiz qaytaradi; consent; `validate_answers`; issue'larni saqlaydi; status `validated` yoki `validation_failed` | `REVISION_NOT_CURRENT`, `CONSENT_NOT_VALID` |
 | `validation_issues(db, revision_id)` | Revisionning saqlangan xatolari (`item_code`, `error_code` bo'yicha tartiblangan) | |
@@ -489,8 +489,8 @@ Hamma DTO'lar `APIModel` (`from_attributes=True`)dan meros oladi.
 operator/auditor), `MemberView`, `MethodologyCreate`, `MethodologyView`,
 `MethodologyVersionCreate` (`version_code` semver), `MethodologyVersionView`,
 `LicenceCreate`, `LicenceView`, `PublishRequest`, `RetentionPolicyCreate` (1..36500 kun),
-`ResearchCreate`, `ResearchView`, `ParticipantCreate`, `ParticipantView`, `ConsentCreate`,
-`ConsentView`, `ResponseCreate`, `RevisionCreate` (`correction_reason`,
+`ResearchCreate`, `ResearchView` (+ `consent_reference`, `consent_version`), `ParticipantCreate`, `ParticipantView`, `ConsentCreate`,
+`ConsentView`, `ResponseCreate`, `RevisionCreate` (`correction_reason` — ixtiyoriy,
 `expected_lock_version`), `ValidationIssueView`, `RevisionView` (+ `validation_issues`), `ResponseView`, `CalculationRequest`
 (`response_revision_id`, `idempotency_key`), `ScaleResultView`, `ResultView`,
 `CSVPreviewRequest`, `ImportPreviewView`, `ImportConfirmRequest`, `ImportConfirmView`.
@@ -498,7 +498,7 @@ operator/auditor), `MemberView`, `MethodologyCreate`, `MethodologyView`,
 **`schemas/read.py` (read-model):** `RetentionPolicyView`, `LicenceDetailView`,
 `MethodologyVersionDetailView` (+ `methodology_code`, `methodology_name`), `MethodologyDetailView`, `ParticipantListItem`,
 `ParticipantPage`, `ParticipantDetailView`, `ConsentHistoryItem`, `ConsentHistoryView`,
-`RevisionDetailView` (+ `validation_issues`), `ResponseListItem`, `ResponsePage`, `ResponseDetailView`,
+`RevisionDetailView` (+ `validation_issues`), `ResponseListItem` (+ `result_status`: not_calculated / calculated / recalculation_required, `current_result_id`), `ResponsePage`, `ResponseDetailView`,
 `RevisionHistoryView`, `ResultSummaryView`, `ResultPage`, `PIIWrite`, `PIIView`.
 Sahifalash: `offset ≥ 0`, `limit` 1..100 (default 50).
 
@@ -583,6 +583,8 @@ Research:            ready ──activate──► active
 Response/Revision:   draft ──validate──► validated ──calculate──► (response) scored
                           └──────────► validation_failed
                      yangi revision → response yana draft, lock_version+1
+                     (validated'dan keyingi revision uchun correction_reason shart)
+                     ro'yxatda natija holati: not_calculated → calculated → recalculation_required
 
 ImportJob:           preview_ready ──confirm──► committing ──► completed
 
@@ -641,7 +643,8 @@ App: ErrorBoundary ─► QueryClientProvider ─► AuthProvider ─► Routes
 | `AuthPages.tsx` | `LoginPage`, `RegisterPage`, `BootstrapPage` | `/login`, `/register`, `/setup/bootstrap` |
 | `ResearchPages.tsx` | `ResearchList`, `ResearchCreate`, `ResearchLayout`, `ResearchOverview` | `/researches`, `/researches/new`, `/researches/:id` |
 | `ParticipantPages.tsx` | `ParticipantsPage`, `ParticipantDetail` (consent, PII) | `/researches/:id/participants[/:pid]` |
-| `ResponsePages.tsx` | `ResponsesPage`, `ManualResponse`, `ResponseDetailPage` (validate, calculate) | `/researches/:id/responses[/new]`, `/responses/:id` |
+| `ResponsePages.tsx` | `ResponsesPage` (javob va natija holati), `ResponseDetailPage` (revision tafsilotlari) | `/researches/:id/responses`, `/responses/:id` |
+| `ResponseForm.tsx` | `ResponseForm` — respondent kodi, rozilik, savollar, qoralama, tekshirish va hisoblash | `/researches/:id/responses/new`, `/researches/:id/responses/:responseId` (bitta marshrut) |
 | `ResultImportPages.tsx` | `ImportPage`, `ResultsPage`, `ResultDetail` (export) | `/researches/:id/import`, `/results[/:id]` |
 | `AdminPages.tsx` | `TeamPage`, `RetentionPage`, `AuditPage`, `MethodologiesPage`, `MethodologyDetail`, `RegistryPage` | `/team`, `/retention`, `/audit`, `/methodologies[/:id]`, `/registry` |
 
@@ -651,6 +654,14 @@ rol bo'yicha Jamoa, Retention, Audit; platform admin uchun Registry). Natijalar 
 nomi bilan ko'rsatadi, yagona retention siyosatini avtomatik qo'llaydi va "Yaratish va boshlash"
 bilan create + activate'ni ketma-ket bajaradi; aktivlash xato bersa shu tadqiqotda
 "Tadqiqotni boshlash" tugmasi qoladi (`draft` va `ready` holatlari uchun).
+
+**Javob formasi (`ResponseForm`).** "Natijani hisoblash" ketma-ket: respondentni yaratadi
+(`PARTICIPANT_CODE_EXISTS` bo'lsa kod bo'yicha topib qayta ishlatadi, javobi bor bo'lsa rad etadi)
+→ rozilik belgisi qo'yilgan bo'lsagina `granted` consent yozadi → response'ni `finalize:false`
+bilan yaratadi yoki o'zgargan javoblar bo'lsa revision qo'shadi (`RESPONSE_ATTEMPT_EXISTS` bo'lsa
+mavjudini oladi) → validate (xatolar `validation_issues` orqali savol yonida) → calculate
+(`idempotency_key = calc-<revision id>`) → natija sahifasi. "Qoralamani saqlash" validatsiyadan
+oldin to'xtaydi; "Saqlandi" faqat server javobidan keyin. Operator "Tekshirish" tugmasini ko'radi.
 
 **Frontend capability siyosati**
 
@@ -672,13 +683,13 @@ Dev server: Vite `:5173`, `/api` va `/health` → `http://127.0.0.1:8000` proxy.
 
 | Fayl | Qamrov |
 |---|---|
-| `tests/test_api.py` (16) | bootstrap, generic login, scoring + disclaimer + idempotency, RBAC va cross-tenant, consent/pin gate'lar, revision immutability, revoked licence, cache/natija o'qishda consent va licence gate'i, takroriy participant/retention kodi 409, har bir savol bo'yicha validatsiya xatolari, summary_only redaksiya, CSV + PII |
+| `tests/test_api.py` (19) | bootstrap, generic login, scoring + disclaimer + idempotency, RBAC va cross-tenant, consent/pin gate'lar, revision immutability, revoked licence, cache/natija o'qishda consent va licence gate'i, takroriy participant/retention kodi 409, har bir savol bo'yicha validatsiya xatolari, tuzatish sababi qoidasi, ro'yxatdagi natija holati, summary_only redaksiya, CSV + PII |
 | `tests/test_scoring.py` (11) | kontrakt vektorlari, insufficient data, validatsiya kodlari, norm chegaralari, half-up, AST xavfsizligi va limitlari, division by zero, norm overlap |
 | `tests/test_security_release.py` (7) | bootstrap gate, export RBAC, security headerlar, CSV encoding/hajm, version detail kontekst, yopiq registratsiya + admin tashkilot yaratishi, CSV import flag'i |
 | `tests/test_ux_backend_gaps.py` (9) | read-model'lar, pagination, JSON/CSV export, formula-safe CSV, PII AES-GCM, fail-closed, legal hold |
 | `tests/test_config.py` (6) | production secret, bootstrap token validatsiyasi, registratsiya default o'chiq |
 | `tests/test_migrations.py` (2) | toza `upgrade head` va 0001→0002 |
-| `frontend/src/**/*.test.ts(x)` (40) | api client, capability siyosati, UI, Drawer, ErrorBoundary, pilot menyusi va flag'lar, tadqiqotni yaratish va boshlash, sessiya tugashi, flows, import safety |
+| `frontend/src/**/*.test.ts(x)` (48) | api client, capability siyosati, UI, Drawer, ErrorBoundary, pilot menyusi va flag'lar, tadqiqotni yaratish va boshlash, sessiya tugashi, javob formasi (rozilik, qoralama, savol yonidagi xatolar, dublikatsiz qayta urinish, tuzatish sababi), javoblar ro'yxati, flows, import safety |
 
 Ishga tushirish: `pytest -q`; frontend — `npm run typecheck && npm run lint && npm run test && npm run build`.
 
@@ -690,7 +701,7 @@ Ishga tushirish: `pytest -q`; frontend — `npm run typecheck && npm run lint &&
 | Tenant / RBAC | `TENANT_ACCESS_DENIED`, `ROLE_FORBIDDEN`, `ORGANIZATION_CODE_EXISTS`, `ORGANIZATION_CONTEXT_REQUIRED`, `MEMBERSHIP_EXISTS` |
 | Registr | `METHODOLOGY_CODE_EXISTS`, `METHODOLOGY_NOT_FOUND`, `METHODOLOGY_VERSION_EXISTS`, `METHODOLOGY_VERSION_NOT_FOUND`, `METHODOLOGY_SCHEMA_INVALID`, `METHODOLOGY_NOT_PUBLISHED`, `VERSION_STATE_INVALID`, `LICENCE_METADATA_REQUIRED`, `LICENCE_NOT_VALID`, `LICENCE_NOT_FOUND`, `NORM_OVERLAP` |
 | Research | `RESEARCH_NOT_FOUND`, `RESEARCH_STATE_INVALID`, `RESEARCH_NOT_ACTIVE`, `RETENTION_POLICY_NOT_FOUND`, `RETENTION_POLICY_CODE_EXISTS`, `NORM_PIN_INVALID`, `RESEARCH_METHODOLOGY_MISMATCH`, `RESEARCH_USE_TYPE_INVALID` |
-| Yig'ish | `PARTICIPANT_NOT_FOUND`, `CONSENT_BASIS_REQUIRED`, `CONSENT_NOT_VALID`, `RESPONSE_NOT_FOUND`, `RESPONSE_ATTEMPT_EXISTS`, `PARTICIPANT_CODE_EXISTS`, `REVISION_CONFLICT`, `REVISION_NOT_FOUND`, `REVISION_NOT_CURRENT` |
+| Yig'ish | `CORRECTION_REASON_REQUIRED`, `PARTICIPANT_NOT_FOUND`, `CONSENT_BASIS_REQUIRED`, `CONSENT_NOT_VALID`, `RESPONSE_NOT_FOUND`, `RESPONSE_ATTEMPT_EXISTS`, `PARTICIPANT_CODE_EXISTS`, `REVISION_CONFLICT`, `REVISION_NOT_FOUND`, `REVISION_NOT_CURRENT` |
 | Validatsiya | `UNKNOWN_ITEM`, `ITEM_REQUIRED`, `TYPE_INVALID`, `BOOLEAN_LITERAL_INVALID`, `OPTION_NOT_ALLOWED`, `VALUE_OUT_OF_RANGE`, `STEP_INVALID` |
 | Scoring | `RESPONSE_NOT_VALIDATED`, `METHODOLOGY_HASH_MISMATCH`, `IDEMPOTENCY_KEY_REUSED`, `CALCULATION_IN_PROGRESS`, `RESEARCH_CHANGED_DURING_RUN`, `CONSENT_CHANGED_DURING_RUN`, `LICENCE_CHANGED_DURING_RUN`, `MAPPING_NOT_FOUND`, `SCORE_OUT_OF_RANGE`, `RULE_SCHEMA_INVALID`, `RULE_LIMIT_EXCEEDED`, `DIVISION_BY_ZERO`, `RESULT_NOT_FOUND` |
 | Import | `CSV_IMPORT_DISABLED`, `REQUEST_BODY_TOO_LARGE`, `ENCODING_INVALID`, `FILE_TOO_LARGE`, `CSV_MALFORMED`, `DUPLICATE_HEADER`, `PII_COLUMN_FORBIDDEN`, `UNKNOWN_COLUMN`, `REQUIRED_COLUMN_MISSING`, `TEMPLATE_MISMATCH`, `ROW_DUPLICATE`, `IMPORT_NOT_FOUND`, `IMPORT_STATE_INVALID`, `IMPORT_PREVIEW_CHANGED` |
