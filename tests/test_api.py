@@ -559,6 +559,38 @@ def test_response_list_reports_whether_the_current_revision_is_calculated(prepar
     assert listed() == ("calculated", second["id"])
 
 
+def test_result_marks_whether_it_belongs_to_the_current_answers(prepared):
+    client = prepared["client"]
+    headers = bearer(prepared["owner_token"], prepared["organization_id"])
+    response = create_response(prepared)
+    old = calculate(prepared, response["current_revision_id"], "current-old").json()
+    assert old["is_current"] is True
+    assert old["participant_code"] == "P-001"
+    assert old["methodology_name"] == "Synthetic Balance Demo"
+    assert old["version_code"] == "1.0.0"
+    revised = client.post(
+        f"/api/v1/responses/{response['id']}/revisions",
+        headers=headers,
+        json={
+            "answers": {"q1": 3, "q2": 0, "q3": 1, "q4": 0},
+            "correction_reason": "Kiritishdagi xato",
+            "expected_lock_version": response["lock_version"],
+            "finalize": True,
+        },
+    ).json()
+    new = calculate(prepared, revised["id"], "current-new").json()
+    reread = client.get(f"/api/v1/results/{old['id']}", headers=headers).json()
+    assert reread["is_current"] is False
+    assert new["is_current"] is True
+    listed = client.get(
+        f"/api/v1/results?research_id={prepared['research']['id']}", headers=headers
+    ).json()["items"]
+    assert {item["id"]: item["is_current"] for item in listed} == {
+        old["id"]: False,
+        new["id"]: True,
+    }
+
+
 def test_research_view_exposes_consent_reference(prepared):
     researches = (
         prepared["client"]

@@ -171,6 +171,7 @@ class ResultSummaryView(APIModel):
     participant_id: str
     response_id: str
     response_revision_id: str
+    is_current: bool
     status: str
     calculated_at: datetime
     result_hash: str

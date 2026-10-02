@@ -283,7 +283,13 @@ class ResultView(APIModel):
     id: str
     research_id: str
     participant_id: str
+    participant_code: str
+    response_id: str
     response_revision_id: str
+    # False once the answers were corrected; the result stays as history.
+    is_current: bool
+    methodology_name: str
+    version_code: str
     status: str
     disclaimer_i18n: dict[str, str]
     calculated_at: datetime

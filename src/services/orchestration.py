@@ -12,8 +12,10 @@ from src.models.domain import (
     ConsentRecord,
     ExplainabilityTrace,
     LicenceRevision,
+    Methodology,
     MethodologyVersion,
     Organization,
+    Participant,
     Research,
     ResearchMethodologyPin,
     Response,
@@ -338,11 +340,20 @@ def result_view(db: Session, result: Result) -> dict:
             .where(TraceStep.trace_id == trace.id)
             .order_by(TraceStep.sequence)
         ).all()
+    response = db.get(Response, result.response_id)
+    participant = db.get(Participant, result.participant_id)
+    version = db.get(MethodologyVersion, result.methodology_version_id)
+    methodology = db.get(Methodology, version.methodology_id) if version else None
     return {
         "id": result.id,
         "research_id": result.research_id,
         "participant_id": result.participant_id,
+        "participant_code": participant.external_code if participant else "",
+        "response_id": result.response_id,
         "response_revision_id": result.response_revision_id,
+        "is_current": is_current_result(db, result, response),
+        "methodology_name": methodology.canonical_name if methodology else "",
+        "version_code": version.version_code if version else "",
         "status": result.status,
         "disclaimer_i18n": result.disclaimer_i18n_snapshot,
         "calculated_at": result.calculated_at,
@@ -380,6 +391,16 @@ def result_view(db: Session, result: Result) -> dict:
             for row in steps
         ],
     }
+
+
+def is_current_result(
+    db: Session, result: Result, response: Response | None = None
+) -> bool:
+    """A result is current while its revision is still the response's current one."""
+    response = response or db.get(Response, result.response_id)
+    return bool(
+        response and response.current_revision_id == result.response_revision_id
+    )
 
 
 def _effective_disclosure(licence: LicenceRevision) -> str:

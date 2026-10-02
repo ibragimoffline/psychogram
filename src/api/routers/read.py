@@ -63,7 +63,11 @@ from src.services.exports import (
     build_json_export,
     build_research_csv,
 )
-from src.services.orchestration import _effective_disclosure, require_result_policy
+from src.services.orchestration import (
+    _effective_disclosure,
+    is_current_result,
+    require_result_policy,
+)
 from src.services.pii import delete_pii, upsert_pii, view_pii
 from src.services.registry import check_licence, latest_licence
 
@@ -1054,6 +1058,7 @@ def _result_summary(db: Session, result: Result) -> ResultSummaryView:
         participant_id=result.participant_id,
         response_id=result.response_id,
         response_revision_id=result.response_revision_id,
+        is_current=is_current_result(db, result),
         status=result.status,
         calculated_at=result.calculated_at,
         result_hash=result.result_hash,
