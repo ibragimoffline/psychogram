@@ -19,7 +19,7 @@ const policy: Record<Capability, readonly Role[]> = {
   'response:write': ['owner', 'admin', 'researcher', 'operator'],
   'result:calculate': ['owner', 'admin', 'researcher'],
   'result:read': ['owner', 'admin', 'researcher', 'auditor'],
-  'result:export': ['owner', 'admin', 'researcher', 'auditor'],
+  'result:export': ['owner', 'admin', 'researcher'],
   'team:manage': ['owner', 'admin'],
   'retention:manage': ['owner', 'admin'],
   'audit:read': ['owner', 'admin', 'auditor'],

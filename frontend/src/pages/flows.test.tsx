@@ -46,9 +46,16 @@ const input=await screen.findByLabelText(/CSV faylni tanlang/i,{selector:'input'
  it('keeps disclaimer visible, opens trace and requests only official JSON export',async()=>{
   const result={id:'res1',research_id:'r1',participant_id:'p1',response_revision_id:'rev1',status:'complete',disclaimer_i18n:{'uz-Latn':'Bu natija tibbiy tashxis emas.'},calculated_at:'2026-07-16T10:00:00Z',result_hash:'abc1234567890000',scales:[{scale_code:'total',validity_status:'valid',reason_codes:[],answered_count:1,missing_count:0,score_display:'5.00',unit_code:'point',norm_band_code:null,interpretation_snapshot_i18n:null,disclosure_level_applied:'derived_only'}],trace:[{step_name:'Aggregate',operation:'sum'}]}
   const create=vi.fn(()=> 'blob:url');Object.defineProperty(URL,'createObjectURL',{value:create,configurable:true});Object.defineProperty(URL,'revokeObjectURL',{value:vi.fn(),configurable:true});vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>undefined)
-start('/results/res1',(input)=>{const path=String(input);if(path.includes('/auth/me'))return json({...me(),memberships:[{...me().memberships[0],role:'auditor'}]});if(path.includes('/export?format=json'))return Promise.resolve(new Response('{}',{status:200}));if(path.endsWith('/results/res1'))return json(result);return json({})})
+start('/results/res1',(input)=>{const path=String(input);if(path.includes('/auth/me'))return json({...me(),memberships:[{...me().memberships[0],role:'researcher'}]});if(path.includes('/export?format=json'))return Promise.resolve(new Response('{}',{status:200}));if(path.endsWith('/results/res1'))return json(result);return json({})})
   expect((await screen.findAllByText(/Bu natija tibbiy tashxis emas/)).length).toBeGreaterThanOrEqual(1);await userEvent.click(screen.getByRole('button',{name:/Qanday hisoblandi/}));expect(await screen.findByText('Aggregate')).toBeVisible();await userEvent.click(screen.getByRole('button',{name:'JSON'}));await waitFor(()=>expect(create).toHaveBeenCalled())
   const urls=(fetch as ReturnType<typeof vi.fn>).mock.calls.map(([url])=>String(url));expect(urls.some(url=>url.endsWith('/results/res1/export?format=json'))).toBe(true);expect(urls.some(url=>/format=(pdf|xlsx)/.test(url))).toBe(false)
+ })
+
+ it('shows results to auditors without export actions the server would reject',async()=>{
+  const result={id:'res1',research_id:'r1',participant_id:'p1',response_revision_id:'rev1',status:'complete',disclaimer_i18n:{'uz-Latn':'Bu natija tibbiy tashxis emas.'},calculated_at:'2026-07-16T10:00:00Z',result_hash:'abc1234567890000',scales:[{scale_code:'total',validity_status:'valid',reason_codes:[],answered_count:1,missing_count:0,score_display:'5.00',unit_code:'point',norm_band_code:null,interpretation_snapshot_i18n:null,disclosure_level_applied:'derived_only'}],trace:[]}
+  start('/results/res1',(input)=>{const path=String(input);if(path.includes('/auth/me'))return json({...me(),memberships:[{...me().memberships[0],role:'auditor'}]});if(path.endsWith('/results/res1'))return json(result);return json({})})
+  expect(await screen.findByText('5.00',{exact:false})).toBeInTheDocument();expect(screen.queryByRole('button',{name:'JSON'})).not.toBeInTheDocument();expect(screen.queryByRole('button',{name:'CSV'})).not.toBeInTheDocument()
+  expect((fetch as ReturnType<typeof vi.fn>).mock.calls.some(([url])=>String(url).includes('/export'))).toBe(false)
  })
 })
 
