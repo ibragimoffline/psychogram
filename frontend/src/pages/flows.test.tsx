@@ -34,6 +34,12 @@ describe('pilot scope',()=>{
  it('does not route to CSV import unless explicitly enabled',async()=>{start('/researches/r1/import',(input)=>{const path=String(input);if(path.includes('/auth/me'))return json(me());if(path.endsWith('/researches'))return json([research]);return json({})});await waitFor(()=>expect(window.location.pathname).toBe('/researches'));expect(screen.queryByText(/CSV faylni tanlang/i)).not.toBeInTheDocument()})
 })
 
+describe('session expiry',()=>{
+ it('returns to login with a notice when an authenticated call gets 401',async()=>{start('/researches',(input)=>{const path=String(input);if(path.includes('/auth/me'))return json(me());if(path.endsWith('/researches'))return json({error:{code:'AUTH_TOKEN_INVALID',message:'Access token is invalid or expired'}},401);return json({})});await visible(screen.findByText('Sessiya tugadi'));expect(window.location.pathname).toBe('/login');expect(sessionStorage.getItem('psychogram_token')).toBeNull()})
+ it('returns to login with a notice when the stored token is already expired',async()=>{start('/researches',(input)=>String(input).includes('/auth/me')?json({error:{code:'AUTH_TOKEN_INVALID',message:'expired'}},401):json([]));await visible(screen.findByText('Sessiya tugadi'));expect(window.location.pathname).toBe('/login')})
+ it('keeps the session on 403 and shows the error in place',async()=>{start('/researches',(input)=>{const path=String(input);if(path.includes('/auth/me'))return json(me());if(path.endsWith('/researches'))return json({error:{code:'ROLE_FORBIDDEN',message:'Taqiqlangan'}},403);return json({})});await screen.findByText(/ROLE_FORBIDDEN/);expect(window.location.pathname).toBe('/researches');expect(sessionStorage.getItem('psychogram_token')).toBe('token');expect(screen.queryByText('Sessiya tugadi')).not.toBeInTheDocument()})
+})
+
 describe('authenticated contracts',()=>{
  it('removes operator phantom create/result navigation actions',async()=>{const operator={...me(),memberships:[{...me().memberships[0],role:'operator'}]};start('/researches',(input)=>String(input).includes('/auth/me')?json(operator):json([]));await screen.findByRole('heading',{name:'Tadqiqotlar'});expect(screen.queryByRole('link',{name:'Yangi tadqiqot'})).not.toBeInTheDocument();expect(screen.queryByRole('link',{name:'Natijalar'})).not.toBeInTheDocument()})
  it('clears tenant-private reveal state and refetches with the selected tenant header',async()=>{
